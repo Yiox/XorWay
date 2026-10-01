@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=XorWay
+Comment=Affiche les fenêtres XWayland et Wayland natives dans le systray
+Exec=@BINDIR@/xorway
+Icon=preferences-system-windows
+Terminal=false
+Categories=Utility;System;
+X-GNOME-Autostart-enabled=true
+X-KDE-autostart-after=panel
