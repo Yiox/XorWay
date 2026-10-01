@@ -2,7 +2,17 @@
 // (KWin, GNOME Shell, X11 seul).
 package backend
 
-import "context"
+import (
+	"context"
+	"errors"
+)
+
+// ErrPending signale que le backend démarre et n'a pas encore de données.
+// Ce n'est pas une erreur à présenter comme telle.
+var ErrPending = errors.New("chargement…")
+
+// ErrAlreadyRunning signale qu'une autre instance de XorWay est active.
+var ErrAlreadyRunning = errors.New("XorWay est déjà lancé")
 
 // ClientType indique le protocole utilisé par une fenêtre.
 type ClientType int

@@ -13,6 +13,10 @@ import (
 // RetryInterval est le délai entre deux tentatives de connexion à Xwayland.
 const RetryInterval = 3 * time.Second
 
+// ErrConnecting est renvoyée par Clients avant la première tentative de
+// connexion.
+var ErrConnecting = errors.New("x11: connexion en cours")
+
 // Monitor maintient une connexion à Xwayland (avec reconnexion automatique)
 // et signale les changements de la liste des fenêtres ou de leurs titres.
 type Monitor struct {
@@ -29,7 +33,7 @@ func NewMonitor(display string) *Monitor {
 	return &Monitor{
 		display: display,
 		changes: make(chan struct{}, 1),
-		err:     errors.New("x11: connexion en cours"),
+		err:     ErrConnecting,
 	}
 }
 

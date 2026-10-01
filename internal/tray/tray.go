@@ -3,6 +3,7 @@ package tray
 
 import (
 	"cmp"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -47,6 +48,9 @@ func (t *Tray) Init() {
 
 // Update reflète un nouvel état (ou une erreur du backend).
 func (t *Tray) Update(snap backend.Snapshot, err error) {
+	if errors.Is(err, backend.ErrPending) {
+		return // l'état « Chargement… » posé par Init reste affiché
+	}
 	if err != nil {
 		t.setIcon(stateError)
 		t.setTooltip("XorWay — " + err.Error())

@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"log/slog"
@@ -16,6 +17,7 @@ import (
 	"fyne.io/systray"
 
 	"xorway/internal/backend"
+	"xorway/internal/backend/kwin"
 	"xorway/internal/backend/x11only"
 	"xorway/internal/tray"
 )
@@ -23,7 +25,7 @@ import (
 const debounce = 200 * time.Millisecond
 
 func main() {
-	backendFlag := flag.String("backend", "auto", "backend à utiliser : auto, x11")
+	backendFlag := flag.String("backend", "auto", "backend à utiliser : auto, kwin, x11")
 	interval := flag.Duration("interval", 3*time.Second, "intervalle du polling de secours")
 	debug := flag.Bool("debug", false, "journalisation détaillée")
 	flag.Parse()
@@ -61,11 +63,19 @@ func main() {
 func selectBackend(name string) (backend.Backend, error) {
 	display := os.Getenv("DISPLAY")
 	switch name {
+	case "kwin":
+		return kwin.New(display), nil
 	case "x11":
 		return x11only.New(display), nil
 	case "auto":
 		desktop := strings.ToUpper(os.Getenv("XDG_CURRENT_DESKTOP"))
 		slog.Debug("détection du bureau", "XDG_CURRENT_DESKTOP", desktop)
+		// XDG_CURRENT_DESKTOP est une liste séparée par « : ».
+		for _, d := range strings.Split(desktop, ":") {
+			if d == "KDE" {
+				return kwin.New(display), nil
+			}
+		}
 		return x11only.New(display), nil
 	default:
 		return nil, fmt.Errorf("backend inconnu %q", name)
@@ -78,6 +88,10 @@ func onReady(ctx context.Context, b backend.Backend, interval time.Duration) {
 
 	if err := b.Start(ctx); err != nil {
 		slog.Error("démarrage du backend", "err", err)
+		if errors.Is(err, backend.ErrAlreadyRunning) {
+			systray.Quit()
+			return
+		}
 		t.Update(backend.Snapshot{}, err)
 	}
 

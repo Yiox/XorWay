@@ -4,6 +4,7 @@ package x11only
 
 import (
 	"context"
+	"errors"
 	"strconv"
 
 	"xorway/internal/backend"
@@ -33,6 +34,9 @@ func (b *Backend) Close() error { return nil }
 
 func (b *Backend) Snapshot() (backend.Snapshot, error) {
 	clients, err := b.mon.Clients()
+	if errors.Is(err, x11.ErrConnecting) {
+		return backend.Snapshot{}, backend.ErrPending
+	}
 	if err != nil {
 		return backend.Snapshot{}, err
 	}
