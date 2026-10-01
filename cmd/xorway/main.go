@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Commande xorway : indique dans le systray quelles fenêtres tournent sous
 // XWayland et lesquelles sont en Wayland natif.
 package main

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Package config persiste les préférences de l'utilisateur dans
 // $XDG_CONFIG_HOME/xorway/config.json.
 package config

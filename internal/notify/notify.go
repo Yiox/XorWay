@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Package notify envoie des notifications de bureau via
 // org.freedesktop.Notifications.
 package notify

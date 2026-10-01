@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Package x11 liste les fenêtres gérées par le serveur Xwayland.
 //
 // Sous une session Wayland, tout client présent dans _NET_CLIENT_LIST du

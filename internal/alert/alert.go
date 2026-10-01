@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Package alert notifie l'utilisateur quand un jeu s'ouvre sous XWayland.
 package alert
 

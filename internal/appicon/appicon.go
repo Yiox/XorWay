@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Package appicon retrouve l'icône d'une application (fichier .desktop puis
 // thème d'icônes freedesktop) et la rend en PNG carré, sans CGO.
 package appicon

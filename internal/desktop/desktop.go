@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Package desktop indexe les fichiers .desktop (spécification freedesktop
 // Desktop Entry) pour retrouver le nom, l'icône et les catégories d'une
 // application à partir de son app id ou de sa classe de fenêtre.

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Package backend définit l'interface commune aux sources de fenêtres
 // (KWin, GNOME Shell, X11 seul).
 package backend

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Package kwin est le backend KDE Plasma 6 : un script KWin, chargé via
 // D-Bus, pousse la liste des fenêtres vers le daemon.
 package kwin

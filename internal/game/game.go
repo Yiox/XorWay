@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Package game devine si une fenêtre appartient à un jeu vidéo.
 //
 // Les indices utilisés, du plus au moins fiable :

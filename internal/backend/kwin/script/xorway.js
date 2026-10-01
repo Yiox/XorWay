@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // XorWay — script KWin 6.
 // Envoie la liste des fenêtres au daemon (org.xorway.Daemon) à chaque
 // changement. Chargé et déchargé par le daemon via org.kde.KWin /Scripting.

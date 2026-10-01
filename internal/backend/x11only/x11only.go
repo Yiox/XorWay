@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Package x11only est le backend de repli : il ne voit que les fenêtres
 // XWayland, via _NET_CLIENT_LIST du serveur Xwayland.
 package x11only

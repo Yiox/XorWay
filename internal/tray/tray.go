@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Package tray affiche l'état des fenêtres dans une icône StatusNotifierItem.
 package tray
 

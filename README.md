@@ -133,3 +133,23 @@ busctl --user call org.kde.KWin /Scripting org.kde.kwin.Scripting isScriptLoaded
 - Un titre qui change en continu (ex. terminal avec animation) met à jour
   l'entrée correspondante à chaque changement ; le menu n'est reconstruit que
   quand des fenêtres apparaissent ou disparaissent.
+
+## Divulgation IA
+
+Ce projet a été développé avec l'assistance d'une IA : **Claude Opus 5.5**
+(Anthropic), via Claude Code. L'IA a rédigé la majeure partie du code, du
+script KWin, du Makefile et de cette documentation, à partir des
+spécifications et sous la direction de l'auteur, qui a validé le plan, testé
+chaque étape sur sa machine et décidé des évolutions. Les commits concernés
+portent la mention `Co-Authored-By: Claude`. Les fichiers `AGENTS.md` et
+`CLAUDE.md` décrivent le projet pour les agents de code.
+
+## Licence
+
+Copyright © 2026 l'auteur de XorWay.
+
+XorWay est un logiciel libre : vous pouvez le redistribuer et/ou le modifier
+selon les termes de la **GNU Affero General Public License** telle que publiée
+par la Free Software Foundation, version 3 de la licence, ou (à votre choix)
+toute version ultérieure (`AGPL-3.0-or-later`). Voir le fichier
+[`LICENSE`](LICENSE).
