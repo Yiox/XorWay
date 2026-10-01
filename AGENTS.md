@@ -20,6 +20,8 @@ d'ouvrir le code ; n'ouvrir que les fichiers concernés.
 | `internal/game/` | heuristiques jeu : `steam_app_*`, `SteamAppId` (/proc environ), Wine, catégorie Game |
 | `internal/alert/`, `internal/notify/` | dédoublonnage par PID + `org.freedesktop.Notifications` |
 | `internal/config/` | `~/.config/xorway/config.json` (`notifyGames`) |
+| `internal/install/` | sous-commandes `install`/`uninstall` (copie dans ~/.local/bin, .desktop embarqué `xorway.desktop`, `@BINDIR@` remplacé) |
+| `.goreleaser.yaml`, `.github/workflows/release.yml` | Release sur tag `v*` : tar.gz, deb, rpm, archlinux (amd64/arm64) |
 
 ## Invariants / pièges
 
@@ -35,6 +37,9 @@ d'ouvrir le code ; n'ouvrir que les fichiers concernés.
   sinon reconstruit. `Tray.Update` : une seule goroutine (la boucle).
 - `backend.Window.Game` est rempli par `main`, jamais par les backends.
 - Sous GNOME, ne pas se connecter à Xwayland (démarrage à la demande).
+- `xorway.desktop` (template `@BINDIR@`) est la source unique : utilisé par
+  `install`, le Makefile et le hook `before` de GoReleaser (`build/`).
+- `main.version` est injectée au build (Makefile : `git describe`).
 
 ## Conventions
 

@@ -1,0 +1,53 @@
+# Publication des versions : un tag vX.Y.Z poussé sur GitHub déclenche
+# .github/workflows/release.yml, qui exécute GoReleaser avec ce fichier.
+# Test local : goreleaser release --snapshot --clean
+version: 2
+project_name: xorway
+
+before:
+  hooks:
+    # Fichier .desktop pour les paquets système (binaire dans /usr/bin).
+    - sh -c "mkdir -p build && sed 's|@BINDIR@|/usr/bin|' internal/install/xorway.desktop > build/xorway.desktop"
+
+builds:
+  - main: ./cmd/xorway
+    binary: xorway
+    env:
+      - CGO_ENABLED=0
+    goos: [linux]
+    goarch: [amd64, arm64]
+    flags: [-trimpath]
+    ldflags:
+      - -s -w -X main.version={{ .Version }}
+
+archives:
+  - formats: [tar.gz]
+    name_template: "{{ .ProjectName }}_{{ .Version }}_linux_{{ .Arch }}"
+    files: [README.md, LICENSE]
+
+checksum:
+  name_template: checksums.txt
+
+nfpms:
+  - package_name: xorway
+    file_name_template: "{{ .ConventionalFileName }}"
+    vendor: Yiox
+    maintainer: "Yiox <36563878+Yiox@users.noreply.github.com>"
+    homepage: https://github.com/Yiox/XorWay
+    description: |-
+      Icône systray indiquant quelles fenêtres tournent sous XWayland
+      et lesquelles sont en Wayland natif (KDE Plasma 6).
+    license: AGPL-3.0-or-later
+    formats: [deb, rpm, archlinux]
+    bindir: /usr/bin
+    contents:
+      - src: build/xorway.desktop
+        dst: /usr/share/applications/xorway.desktop
+      - src: build/xorway.desktop
+        dst: /etc/xdg/autostart/xorway.desktop
+        type: config|noreplace
+      - src: LICENSE
+        dst: /usr/share/licenses/xorway/LICENSE
+
+changelog:
+  sort: asc

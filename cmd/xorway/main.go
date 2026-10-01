@@ -26,13 +26,38 @@ import (
 	"xorway/internal/config"
 	"xorway/internal/desktop"
 	"xorway/internal/game"
+	"xorway/internal/install"
 	"xorway/internal/notify"
 	"xorway/internal/tray"
 )
 
 const debounce = 200 * time.Millisecond
 
+// version est renseignée au build : -ldflags "-X main.version=v1.2.3".
+var version = "dev"
+
+const usage = `Usage :
+  xorway [options]          lance le daemon (icône dans le systray)
+  xorway install [--no-autostart]
+                            installe ce binaire pour l'utilisateur
+                            (~/.local/bin, lanceur, démarrage automatique)
+  xorway uninstall          désinstalle (la configuration est conservée)
+  xorway version            affiche la version
+
+Options du daemon :
+`
+
 func main() {
+	if len(os.Args) > 1 {
+		if handled := subcommand(os.Args[1], os.Args[2:]); handled {
+			return
+		}
+	}
+
+	flag.Usage = func() {
+		fmt.Fprint(flag.CommandLine.Output(), usage)
+		flag.PrintDefaults()
+	}
 	backendFlag := flag.String("backend", "auto", "backend à utiliser : auto, kwin, x11")
 	interval := flag.Duration("interval", 3*time.Second, "intervalle du polling de secours")
 	debug := flag.Bool("debug", false, "journalisation détaillée")
@@ -49,7 +74,7 @@ func main() {
 		fmt.Fprintln(os.Stderr, "xorway:", err)
 		os.Exit(2)
 	}
-	slog.Info("backend sélectionné", "backend", b.Name())
+	slog.Info("démarrage", "version", version, "backend", b.Name())
 
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
@@ -65,6 +90,33 @@ func main() {
 			slog.Warn("fermeture du backend", "err", err)
 		}
 	})
+}
+
+// subcommand exécute une sous-commande ; renvoie false si name n'en est pas une.
+func subcommand(name string, args []string) bool {
+	var err error
+	switch name {
+	case "install":
+		fs := flag.NewFlagSet("install", flag.ExitOnError)
+		noAutostart := fs.Bool("no-autostart", false, "ne pas lancer XorWay à l'ouverture de session")
+		fs.Parse(args)
+		if err = install.Install(os.Stdout, !*noAutostart); err == nil {
+			fmt.Println("XorWay est installé. Lancez-le depuis le menu des applications ou avec « xorway ».")
+		}
+	case "uninstall":
+		if err = install.Uninstall(os.Stdout); err == nil {
+			fmt.Println("XorWay est désinstallé. Quittez l'instance en cours depuis son menu si besoin.")
+		}
+	case "version", "--version", "-version":
+		fmt.Println("xorway", version)
+	default:
+		return false
+	}
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "xorway:", err)
+		os.Exit(1)
+	}
+	return true
 }
 
 // selectBackend choisit le backend selon le drapeau ou XDG_CURRENT_DESKTOP.

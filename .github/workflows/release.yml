@@ -1,0 +1,34 @@
+# Publie une Release GitHub (binaires + paquets) à chaque tag vX.Y.Z.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  goreleaser:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # GoReleaser a besoin des tags pour le changelog
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version: stable
+
+      - name: Vérifications
+        run: |
+          test -z "$(gofmt -l .)"
+          go vet ./...
+
+      - uses: goreleaser/goreleaser-action@v7
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

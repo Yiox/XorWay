@@ -21,6 +21,27 @@ le signale et propose une piste pour le lancer en Wayland natif (option
 
 ## Installation
 
+### Depuis une Release GitHub (sans compiler)
+
+Téléchargez la dernière version sur
+<https://github.com/Yiox/XorWay/releases> :
+
+- **binaire seul** (toutes distributions, sans root) :
+
+  ```sh
+  tar xzf xorway_*_linux_amd64.tar.gz
+  ./xorway install            # ~/.local/bin, lanceur, démarrage automatique
+  xorway                      # ou depuis le menu des applications
+  xorway uninstall            # désinstallation (la configuration est gardée)
+  ```
+
+  `xorway install --no-autostart` n'active pas le démarrage automatique.
+- **paquets** : `.rpm` (Fedora…), `.deb` (Debian, Ubuntu…), `.pkg.tar.zst`
+  (Arch). Ils installent `/usr/bin/xorway`, le lanceur et
+  `/etc/xdg/autostart/xorway.desktop` (pour tous les utilisateurs).
+
+### Depuis les sources
+
 ```sh
 make build      # produit bin/xorway
 make install    # ~/.local/bin/xorway + ~/.config/autostart/xorway.desktop
@@ -36,6 +57,7 @@ XorWay (réglables dans les paramètres de notification de Plasma).
 
 ```sh
 xorway [--backend auto|kwin|x11] [--interval 3s] [--debug]
+xorway install [--no-autostart] | uninstall | version
 ```
 
 En mode `auto`, le backend est choisi selon `XDG_CURRENT_DESKTOP` :
@@ -117,6 +139,21 @@ Vérifier le backend KDE :
 busctl --user call org.kde.KWin /Scripting org.kde.kwin.Scripting isScriptLoaded s xorway
 # → b true pendant que xorway tourne, b false après l'avoir quitté
 ```
+
+## Publier une version
+
+Les Releases sont produites par GoReleaser (`.goreleaser.yaml`) via GitHub
+Actions (`.github/workflows/release.yml`) : il suffit de pousser un tag.
+
+```sh
+git tag -s v0.1.0 -m "XorWay 0.1.0"   # tag signé
+git push origin v0.1.0
+```
+
+Le workflow vérifie le code (`gofmt`, `go vet`), compile pour amd64 et arm64
+(sans CGO, version injectée via `-X main.version`), puis publie les archives,
+les paquets et `checksums.txt`. Test local sans publication :
+`goreleaser release --snapshot --clean` (résultat dans `dist/`).
 
 ## Limitations
 

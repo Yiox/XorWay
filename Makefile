@@ -3,16 +3,17 @@ BINDIR     ?= $(PREFIX)/bin
 AUTOSTART  ?= $(HOME)/.config/autostart
 APPDIR     ?= $(PREFIX)/share/applications
 GO         ?= go
+VERSION    ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 
 BIN        := bin/xorway
-DESKTOP    := packaging/xorway.desktop
+DESKTOP    := internal/install/xorway.desktop
 
 .PHONY: all build run vet fmt install uninstall clean
 
 all: build
 
 build:
-	CGO_ENABLED=0 $(GO) build -trimpath -o $(BIN) ./cmd/xorway
+	CGO_ENABLED=0 $(GO) build -trimpath -ldflags "-s -w -X main.version=$(VERSION)" -o $(BIN) ./cmd/xorway
 
 run: build
 	./$(BIN) --debug
