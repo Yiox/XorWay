@@ -5,6 +5,8 @@ package backend
 import (
 	"context"
 	"errors"
+
+	"xorway/internal/game"
 )
 
 // ErrPending signale que le backend démarre et n'a pas encore de données.
@@ -40,6 +42,9 @@ type Window struct {
 	AppID string // app_id Wayland, fichier .desktop ou classe WM_CLASS
 	PID   int
 	Type  ClientType
+	// Game est renseigné par le daemon après coup (les backends le laissent
+	// à game.None).
+	Game game.Source
 }
 
 // Snapshot est l'état des fenêtres à un instant donné.

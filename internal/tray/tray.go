@@ -11,31 +11,65 @@ import (
 	"fyne.io/systray"
 
 	"xorway/internal/backend"
+	"xorway/internal/game"
 )
 
-const maxLabel = 70 // longueur maximale (en runes) d'une entrée du menu
+const (
+	maxLabel = 70 // longueur maximale (en runes) d'une entrée du menu
+	IconSize = 32 // taille des icônes d'applications dans le menu
+)
 
-// entry est une ligne du menu ; une entrée vide est un séparateur.
+// Actions des entrées cliquables.
+const (
+	actionNone = iota
+	actionQuit
+	actionToggleNotify
+)
+
+// entry est une ligne du menu ; la valeur zéro est un séparateur.
 type entry struct {
 	title    string
 	tooltip  string
 	disabled bool
+	icon     string // app id dont on affiche l'icône ("" : aucune)
+	action   int
+	checkbox bool
+	checked  bool
 }
 
 var separator = entry{}
 
-// Tray pilote l'icône et le menu. Ses méthodes doivent être appelées après
-// le démarrage de systray (callback onReady).
-type Tray struct {
-	backendName string
-	lastState   iconState
-	lastMenu    []entry
-	lastTooltip string
+// sameShape indique si deux entrées peuvent être mises à jour sur place.
+func sameShape(a, b entry) bool {
+	return (a == separator) == (b == separator) && a.action == b.action && a.checkbox == b.checkbox
 }
 
-// New crée le tray. backendName est affiché en bas du menu.
-func New(backendName string) *Tray {
-	return &Tray{backendName: backendName, lastState: -1}
+// Options configure le tray.
+type Options struct {
+	BackendName string
+	// Icons renvoie l'icône PNG d'une application (nil si introuvable).
+	Icons func(appID string) []byte
+	// GenericIcon remplace une icône introuvable.
+	GenericIcon []byte
+	// NotifyGames renvoie l'état de la case « Notifier… » ; nil la masque.
+	NotifyGames func() bool
+	// OnToggleNotify est appelé quand l'utilisateur coche ou décoche la case.
+	OnToggleNotify func()
+}
+
+// Tray pilote l'icône et le menu. Init puis Update doivent être appelés
+// depuis une même goroutine, après le démarrage de systray.
+type Tray struct {
+	opts        Options
+	lastState   iconState
+	lastTooltip string
+	lastMenu    []entry
+	items       []*systray.MenuItem // nil pour les séparateurs
+}
+
+// New crée le tray.
+func New(opts Options) *Tray {
+	return &Tray{opts: opts, lastState: -1}
 }
 
 // Init pose l'icône et un menu d'attente.
@@ -102,7 +136,7 @@ func windowEntries(ws []backend.Window, typ backend.ClientType) []entry {
 	})
 
 	if len(sel) == 0 {
-		return []entry{{title: "    (aucune)", disabled: true}}
+		return []entry{{title: "(aucune)", disabled: true}}
 	}
 	out := make([]entry, 0, len(sel))
 	for _, w := range sel {
@@ -115,7 +149,11 @@ func windowEntries(ws []backend.Window, typ backend.ClientType) []entry {
 			label = title + " — " + w.AppID
 		}
 		tip := fmt.Sprintf("%s\napp : %s\nPID : %d", title, w.AppID, w.PID)
-		out = append(out, entry{title: "    " + truncate(label, maxLabel), tooltip: tip})
+		if w.Game != game.None {
+			label = "🎮 " + label
+			tip += "\nJeu détecté : " + w.Game.String()
+		}
+		out = append(out, entry{title: truncate(label, maxLabel), tooltip: tip, icon: w.AppID})
 	}
 	return out
 }
@@ -147,35 +185,117 @@ func (t *Tray) setTooltip(s string) {
 	systray.SetTooltip(s)
 }
 
-// setMenu reconstruit le menu complet si son contenu a changé.
-func (t *Tray) setMenu(menu []entry) {
-	menu = append(menu,
-		separator,
-		entry{title: "Backend : " + t.backendName, disabled: true},
-		entry{title: "Quitter"},
+// footer ajoute les entrées fixes en bas du menu.
+func (t *Tray) footer(menu []entry) []entry {
+	menu = append(menu, separator)
+	if t.opts.NotifyGames != nil {
+		menu = append(menu, entry{
+			title:    "Notifier les jeux lancés sous XWayland",
+			action:   actionToggleNotify,
+			checkbox: true,
+			checked:  t.opts.NotifyGames(),
+		})
+	}
+	return append(menu,
+		entry{title: "Backend : " + t.opts.BackendName, disabled: true},
+		entry{title: "Quitter", action: actionQuit},
 	)
+}
+
+// setMenu met le menu à jour : sur place si sa structure n'a pas changé
+// (cas courant d'un titre qui change), sinon en le reconstruisant.
+func (t *Tray) setMenu(menu []entry) {
+	menu = t.footer(menu)
 	if slices.Equal(menu, t.lastMenu) {
 		return
 	}
-	t.lastMenu = menu
+	if len(menu) == len(t.lastMenu) && slices.EqualFunc(menu, t.lastMenu, sameShape) {
+		for i, e := range menu {
+			if e != t.lastMenu[i] {
+				t.updateItem(t.items[i], t.lastMenu[i], e)
+			}
+		}
+		t.lastMenu = menu
+		return
+	}
 
+	t.lastMenu = menu
+	t.items = make([]*systray.MenuItem, len(menu))
 	systray.ResetMenu()
 	for i, e := range menu {
 		if e == separator {
 			systray.AddSeparator()
 			continue
 		}
-		item := systray.AddMenuItem(escape(e.title), e.tooltip)
+		var item *systray.MenuItem
+		if e.checkbox {
+			item = systray.AddMenuItemCheckbox(escape(e.title), e.tooltip, e.checked)
+		} else {
+			item = systray.AddMenuItem(escape(e.title), e.tooltip)
+		}
 		if e.disabled {
 			item.Disable()
 		}
-		if i == len(menu)-1 { // « Quitter »
-			// Le canal est fermé par ResetMenu : ok vaut alors false.
-			go func(ch <-chan struct{}) {
-				if _, ok := <-ch; ok {
-					systray.Quit()
-				}
-			}(item.ClickedCh)
+		if e.icon != "" {
+			item.SetIcon(t.appIcon(e.icon))
+		}
+		t.items[i] = item
+		t.listen(item, e.action)
+	}
+}
+
+func (t *Tray) updateItem(item *systray.MenuItem, old, e entry) {
+	if e.title != old.title {
+		item.SetTitle(escape(e.title))
+	}
+	if e.tooltip != old.tooltip {
+		item.SetTooltip(e.tooltip)
+	}
+	if e.disabled != old.disabled {
+		if e.disabled {
+			item.Disable()
+		} else {
+			item.Enable()
 		}
 	}
+	if e.checked != old.checked {
+		if e.checked {
+			item.Check()
+		} else {
+			item.Uncheck()
+		}
+	}
+	if e.icon != old.icon {
+		item.SetIcon(t.appIcon(e.icon))
+	}
+}
+
+func (t *Tray) appIcon(appID string) []byte {
+	if appID == "" || t.opts.Icons == nil {
+		return nil
+	}
+	if png := t.opts.Icons(appID); png != nil {
+		return png
+	}
+	return t.opts.GenericIcon
+}
+
+// listen exécute l'action à chaque clic. ResetMenu ferme le canal, ce qui
+// termine la goroutine.
+func (t *Tray) listen(item *systray.MenuItem, action int) {
+	var f func()
+	switch action {
+	case actionQuit:
+		f = systray.Quit
+	case actionToggleNotify:
+		f = t.opts.OnToggleNotify
+	}
+	if f == nil {
+		return
+	}
+	go func(ch <-chan struct{}) {
+		for range ch {
+			f()
+		}
+	}(item.ClickedCh)
 }

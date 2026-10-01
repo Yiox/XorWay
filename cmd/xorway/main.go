@@ -16,9 +16,15 @@ import (
 
 	"fyne.io/systray"
 
+	"xorway/internal/alert"
+	"xorway/internal/appicon"
 	"xorway/internal/backend"
 	"xorway/internal/backend/kwin"
 	"xorway/internal/backend/x11only"
+	"xorway/internal/config"
+	"xorway/internal/desktop"
+	"xorway/internal/game"
+	"xorway/internal/notify"
 	"xorway/internal/tray"
 )
 
@@ -68,10 +74,10 @@ func selectBackend(name string) (backend.Backend, error) {
 	case "x11":
 		return x11only.New(display), nil
 	case "auto":
-		desktop := strings.ToUpper(os.Getenv("XDG_CURRENT_DESKTOP"))
-		slog.Debug("détection du bureau", "XDG_CURRENT_DESKTOP", desktop)
+		current := strings.ToUpper(os.Getenv("XDG_CURRENT_DESKTOP"))
+		slog.Debug("détection du bureau", "XDG_CURRENT_DESKTOP", current)
 		// XDG_CURRENT_DESKTOP est une liste séparée par « : ».
-		for _, d := range strings.Split(desktop, ":") {
+		for _, d := range strings.Split(current, ":") {
 			if d == "KDE" {
 				return kwin.New(display), nil
 			}
@@ -82,9 +88,51 @@ func selectBackend(name string) (backend.Backend, error) {
 	}
 }
 
+// app regroupe les composants du daemon.
+type app struct {
+	backend  backend.Backend
+	tray     *tray.Tray
+	games    *game.Detector
+	alerter  *alert.Alerter
+	refresh  chan struct{} // demande de rafraîchissement immédiat
+	interval time.Duration
+}
+
 func onReady(ctx context.Context, b backend.Backend, interval time.Duration) {
-	t := tray.New(b.Name())
-	t.Init()
+	cfg, err := config.Load()
+	if err != nil {
+		slog.Warn("lecture de la configuration", "err", err)
+	}
+
+	idx := desktop.NewIndex()
+	icons := appicon.New(idx)
+	notifier, err := notify.New()
+	if err != nil {
+		slog.Warn("notifications indisponibles", "err", err)
+	}
+
+	a := &app{
+		backend:  b,
+		games:    game.NewDetector(idx),
+		alerter:  alert.New(notifier, icons, idx, cfg.NotifyGames),
+		refresh:  make(chan struct{}, 1),
+		interval: interval,
+	}
+	a.tray = tray.New(tray.Options{
+		BackendName: b.Name(),
+		Icons:       func(appID string) []byte { return icons.PNG(appID, tray.IconSize) },
+		GenericIcon: icons.Generic(tray.IconSize),
+		NotifyGames: a.alerter.Enabled,
+		OnToggleNotify: func() {
+			cfg.NotifyGames = !a.alerter.Enabled()
+			a.alerter.SetEnabled(cfg.NotifyGames)
+			if err := config.Save(cfg); err != nil {
+				slog.Warn("enregistrement de la configuration", "err", err)
+			}
+			a.requestRefresh()
+		},
+	})
+	a.tray.Init()
 
 	if err := b.Start(ctx); err != nil {
 		slog.Error("démarrage du backend", "err", err)
@@ -92,28 +140,50 @@ func onReady(ctx context.Context, b backend.Backend, interval time.Duration) {
 			systray.Quit()
 			return
 		}
-		t.Update(backend.Snapshot{}, err)
+		a.tray.Update(backend.Snapshot{}, err)
 	}
 
-	go loop(ctx, b, t, interval)
+	go a.loop(ctx)
 }
 
-// loop rafraîchit le tray sur événement (avec anti-rebond) et, à défaut,
-// par polling.
-func loop(ctx context.Context, b backend.Backend, t *tray.Tray, interval time.Duration) {
-	refresh := func() {
-		snap, err := b.Snapshot()
-		if err != nil {
-			slog.Debug("snapshot", "err", err)
-		} else {
-			slog.Debug("snapshot", "windows", len(snap.Windows),
-				"xwayland", snap.Count(backend.XWayland))
-		}
-		t.Update(snap, err)
+func (a *app) requestRefresh() {
+	select {
+	case a.refresh <- struct{}{}:
+	default:
 	}
-	refresh()
+}
 
-	ticker := time.NewTicker(interval)
+// update lit l'état du backend, repère les jeux et met à jour l'affichage.
+func (a *app) update() {
+	snap, err := a.backend.Snapshot()
+	if err != nil {
+		slog.Debug("snapshot", "err", err)
+		a.tray.Update(snap, err)
+		return
+	}
+
+	type winKey struct {
+		pid   int
+		appID string
+	}
+	present := map[winKey]bool{}
+	for i := range snap.Windows {
+		w := &snap.Windows[i]
+		w.Game = a.games.Detect(w.AppID, w.PID)
+		present[winKey{w.PID, w.AppID}] = true
+	}
+	a.games.Prune(func(pid int, appID string) bool { return present[winKey{pid, appID}] })
+
+	slog.Debug("snapshot", "windows", len(snap.Windows), "xwayland", snap.Count(backend.XWayland))
+	a.alerter.Process(snap)
+	a.tray.Update(snap, nil)
+}
+
+// loop rafraîchit sur événement (avec anti-rebond) et, à défaut, par polling.
+func (a *app) loop(ctx context.Context) {
+	a.update()
+
+	ticker := time.NewTicker(a.interval)
 	defer ticker.Stop()
 	timer := time.NewTimer(debounce)
 	timer.Stop()
@@ -122,12 +192,14 @@ func loop(ctx context.Context, b backend.Backend, t *tray.Tray, interval time.Du
 		select {
 		case <-ctx.Done():
 			return
-		case <-b.Changes():
+		case <-a.backend.Changes():
 			timer.Reset(debounce)
 		case <-timer.C:
-			refresh()
+			a.update()
+		case <-a.refresh:
+			a.update()
 		case <-ticker.C:
-			refresh()
+			a.update()
 		}
 	}
 }

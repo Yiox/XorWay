@@ -1,6 +1,7 @@
 PREFIX     ?= $(HOME)/.local
 BINDIR     ?= $(PREFIX)/bin
 AUTOSTART  ?= $(HOME)/.config/autostart
+APPDIR     ?= $(PREFIX)/share/applications
 GO         ?= go
 
 BIN        := bin/xorway
@@ -26,6 +27,7 @@ install: build
 	install -Dm755 $(BIN) $(DESTDIR)$(BINDIR)/xorway
 	sed 's|@BINDIR@|$(BINDIR)|' $(DESKTOP) > xorway.desktop.tmp
 	install -Dm644 xorway.desktop.tmp $(DESTDIR)$(AUTOSTART)/xorway.desktop
+	install -Dm644 xorway.desktop.tmp $(DESTDIR)$(APPDIR)/xorway.desktop
 	rm -f xorway.desktop.tmp
 	@echo "XorWay installé dans $(BINDIR) ; démarrage automatique à la prochaine session."
 
@@ -33,6 +35,7 @@ uninstall:
 	-pkill -x xorway
 	rm -f $(DESTDIR)$(BINDIR)/xorway
 	rm -f $(DESTDIR)$(AUTOSTART)/xorway.desktop
+	rm -f $(DESTDIR)$(APPDIR)/xorway.desktop
 
 clean:
 	rm -rf bin
