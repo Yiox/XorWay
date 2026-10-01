@@ -146,8 +146,6 @@ portent la mention `Co-Authored-By: Claude`. Les fichiers `AGENTS.md` et
 
 ## Licence
 
-Copyright © 2026 l'auteur de XorWay.
-
 XorWay est un logiciel libre : vous pouvez le redistribuer et/ou le modifier
 selon les termes de la **GNU Affero General Public License** telle que publiée
 par la Free Software Foundation, version 3 de la licence, ou (à votre choix)
