@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Package desktop indexe les fichiers .desktop (spécification freedesktop
-// Desktop Entry) pour retrouver le nom, l'icône et les catégories d'une
-// application à partir de son app id ou de sa classe de fenêtre.
+// Package desktop indexes .desktop files (freedesktop Desktop Entry
+// specification) to find the name, icon and categories of an application
+// from its app id or window class.
 package desktop
 
 import (
@@ -15,19 +15,35 @@ import (
 	"time"
 )
 
-// rescanDelay limite la fréquence des réindexations déclenchées par un échec.
+// rescanDelay limits how often a failed lookup triggers a new scan.
 const rescanDelay = 30 * time.Second
 
-// Entry est le sous-ensemble utile d'un fichier .desktop.
+// Entry is the useful subset of a .desktop file.
 type Entry struct {
-	ID             string // identifiant de fichier, ex. org.kde.dolphin
+	ID             string // desktop file ID, e.g. org.kde.dolphin
 	Name           string
-	Icon           string // nom d'icône du thème ou chemin absolu
+	Names          map[string]string // localized names: Name[fr], Name[pt_BR]…
+	Icon           string            // theme icon name or absolute path
 	Categories     []string
 	StartupWMClass string
 }
 
-// HasCategory indique si l'entrée appartient à la catégorie donnée.
+// LocalName returns the name in the given language ("fr", "pt_BR"…), falling
+// back to the untranslated name.
+func (e *Entry) LocalName(lang string) string {
+	lang = strings.ReplaceAll(lang, "-", "_")
+	if n := e.Names[lang]; n != "" {
+		return n
+	}
+	if base, _, ok := strings.Cut(lang, "_"); ok {
+		if n := e.Names[base]; n != "" {
+			return n
+		}
+	}
+	return e.Name
+}
+
+// HasCategory reports whether the entry belongs to the given category.
 func (e *Entry) HasCategory(c string) bool {
 	for _, x := range e.Categories {
 		if strings.EqualFold(x, c) {
@@ -37,19 +53,19 @@ func (e *Entry) HasCategory(c string) bool {
 	return false
 }
 
-// Index est un index paresseux, sûr pour un usage concurrent.
+// Index is a lazy index, safe for concurrent use.
 type Index struct {
 	mu       sync.Mutex
 	scanned  time.Time
-	byID     map[string]*Entry // clé : ID en minuscules
-	byClass  map[string]*Entry // clé : StartupWMClass en minuscules
-	bySuffix map[string]*Entry // clé : dernier composant de l'ID (org.kde.dolphin → dolphin)
+	byID     map[string]*Entry // key: lowercase ID
+	byClass  map[string]*Entry // key: lowercase StartupWMClass
+	bySuffix map[string]*Entry // key: last component of the ID (org.kde.dolphin → dolphin)
 }
 
-// NewIndex crée un index vide ; le premier Lookup déclenche le scan.
+// NewIndex creates an empty index; the first Lookup triggers the scan.
 func NewIndex() *Index { return &Index{} }
 
-// Lookup cherche l'entrée correspondant à un app id ou une classe WM_CLASS.
+// Lookup finds the entry matching an app id or a WM_CLASS class.
 func (x *Index) Lookup(appID string) *Entry {
 	if appID == "" {
 		return nil
@@ -63,7 +79,7 @@ func (x *Index) Lookup(appID string) *Entry {
 	if e := x.find(appID); e != nil {
 		return e
 	}
-	// Application installée depuis le dernier scan ?
+	// Application installed since the last scan?
 	if time.Since(x.scanned) > rescanDelay {
 		x.scan()
 		return x.find(appID)
@@ -82,7 +98,7 @@ func (x *Index) find(appID string) *Entry {
 	return x.bySuffix[k]
 }
 
-// DataDirs renvoie $XDG_DATA_HOME puis $XDG_DATA_DIRS, par ordre de priorité.
+// DataDirs returns $XDG_DATA_HOME then $XDG_DATA_DIRS, by priority.
 func DataDirs() []string {
 	home := os.Getenv("XDG_DATA_HOME")
 	if home == "" {
@@ -115,12 +131,12 @@ func (x *Index) scan() {
 			if err != nil || d.IsDir() || !strings.HasSuffix(path, ".desktop") {
 				return nil
 			}
-			// L'ID d'un fichier en sous-dossier remplace « / » par « - ».
+			// The ID of a file in a subdirectory replaces "/" with "-".
 			rel, _ := filepath.Rel(root, path)
 			id := strings.ReplaceAll(strings.TrimSuffix(rel, ".desktop"), "/", "-")
 			key := strings.ToLower(id)
 			if _, seen := x.byID[key]; seen {
-				return nil // un répertoire prioritaire l'a déjà fourni
+				return nil // a higher-priority directory already provided it
 			}
 			e, err := parse(path)
 			if err != nil || e == nil {
@@ -145,8 +161,8 @@ func setIfAbsent(m map[string]*Entry, k string, e *Entry) {
 	}
 }
 
-// parse lit le groupe [Desktop Entry]. Renvoie nil pour les entrées
-// masquées (Hidden=true) ou qui ne sont pas des applications.
+// parse reads the [Desktop Entry] group. It returns nil for hidden entries
+// (Hidden=true) and for entries that are not applications.
 func parse(path string) (*Entry, error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -165,7 +181,7 @@ func parse(path string) (*Entry, error) {
 		}
 		if line[0] == '[' {
 			if inGroup {
-				break // seul le premier groupe nous intéresse
+				break // only the first group matters
 			}
 			inGroup = line == "[Desktop Entry]"
 			continue
@@ -196,6 +212,13 @@ func parse(path string) (*Entry, error) {
 		case "Hidden":
 			if v == "true" {
 				return nil, nil
+			}
+		default:
+			if lang, ok := strings.CutPrefix(strings.TrimSpace(k), "Name["); ok {
+				if e.Names == nil {
+					e.Names = map[string]string{}
+				}
+				e.Names[strings.TrimSuffix(lang, "]")] = v
 			}
 		}
 	}

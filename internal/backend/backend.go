@@ -1,24 +1,24 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Package backend définit l'interface commune aux sources de fenêtres
-// (KWin, GNOME Shell, X11 seul).
+// Package backend defines the interface shared by window sources (KWin,
+// GNOME Shell, X11 only).
 package backend
 
 import (
 	"context"
-	"errors"
 
 	"xorway/internal/game"
+	"xorway/internal/i18n"
 )
 
-// ErrPending signale que le backend démarre et n'a pas encore de données.
-// Ce n'est pas une erreur à présenter comme telle.
-var ErrPending = errors.New("chargement…")
+// ErrPending means the backend is starting and has no data yet. It is not
+// shown as an error.
+var ErrPending = i18n.NewError("status.loading")
 
-// ErrAlreadyRunning signale qu'une autre instance de XorWay est active.
-var ErrAlreadyRunning = errors.New("XorWay est déjà lancé")
+// ErrAlreadyRunning means another XorWay instance is active.
+var ErrAlreadyRunning = i18n.NewError("error.already_running")
 
-// ClientType indique le protocole utilisé par une fenêtre.
+// ClientType is the protocol used by a window.
 type ClientType int
 
 const (
@@ -33,33 +33,33 @@ func (t ClientType) String() string {
 	case XWayland:
 		return "XWayland"
 	default:
-		return "inconnu"
+		return "unknown"
 	}
 }
 
-// Window décrit une fenêtre de premier niveau.
+// Window describes a top-level window.
 type Window struct {
 	ID    string
 	Title string
-	AppID string // app_id Wayland, fichier .desktop ou classe WM_CLASS
+	AppID string // Wayland app_id, .desktop file name or WM_CLASS
 	PID   int
 	Type  ClientType
-	// Game est renseigné par le daemon après coup (les backends le laissent
-	// à game.None).
+	// Game is filled in by the daemon afterwards (backends leave it to
+	// game.None).
 	Game game.Source
 }
 
-// Snapshot est l'état des fenêtres à un instant donné.
+// Snapshot is the state of the windows at a given time.
 type Snapshot struct {
 	Windows []Window
-	// NativeKnown vaut false si le backend ne peut pas voir les fenêtres
-	// Wayland natives (backend X11 seul).
+	// NativeKnown is false when the backend cannot see native Wayland
+	// windows (X11-only backend).
 	NativeKnown bool
-	// Notice est un message d'information optionnel affiché dans le menu.
+	// Notice is an optional, already translated message shown in the menu.
 	Notice string
 }
 
-// Count renvoie le nombre de fenêtres du type donné.
+// Count returns the number of windows of the given type.
 func (s Snapshot) Count(t ClientType) int {
 	n := 0
 	for _, w := range s.Windows {
@@ -70,18 +70,19 @@ func (s Snapshot) Count(t ClientType) int {
 	return n
 }
 
-// Backend est une source de fenêtres.
+// Backend is a source of windows.
 type Backend interface {
-	// Name est un nom court, affiché dans le menu.
+	// Name is a short, translated name shown in the menu.
 	Name() string
-	// Start initialise le backend. Les traitements de fond s'arrêtent à
-	// l'annulation du contexte.
+	// Start initializes the backend. Background work stops when the context
+	// is cancelled.
 	Start(ctx context.Context) error
-	// Snapshot renvoie l'état courant. Une erreur signifie que le backend
-	// est indisponible ; son message est affiché tel quel à l'utilisateur.
+	// Snapshot returns the current state. An error means the backend is
+	// unavailable; its message is shown as is to the user, so it must be
+	// translatable (see package i18n).
 	Snapshot() (Snapshot, error)
-	// Changes reçoit une valeur quand l'état a pu changer.
+	// Changes receives a value when the state may have changed.
 	Changes() <-chan struct{}
-	// Close libère les ressources (script KWin, connexions…).
+	// Close releases resources (KWin script, connections…).
 	Close() error
 }

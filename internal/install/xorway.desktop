@@ -1,10 +1,15 @@
 [Desktop Entry]
 Type=Application
 Name=XorWay
-Comment=Affiche les fenêtres XWayland et Wayland natives dans le systray
+GenericName=XWayland Monitor
+GenericName[fr]=Moniteur XWayland
+Comment=Shows XWayland and native Wayland windows in the system tray
+Comment[fr]=Affiche les fenêtres XWayland et Wayland natives dans le systray
+Keywords=Wayland;XWayland;X11;Window;Game;
+Keywords[fr]=Wayland;XWayland;X11;Fenêtre;Jeu;
 Exec=@BINDIR@/xorway
 Icon=preferences-system-windows
 Terminal=false
-Categories=Utility;System;
+Categories=System;Monitor;
 X-GNOME-Autostart-enabled=true
 X-KDE-autostart-after=panel

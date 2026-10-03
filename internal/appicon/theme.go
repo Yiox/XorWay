@@ -12,14 +12,14 @@ import (
 	"strings"
 )
 
-// subdir est un répertoire d'icônes déclaré dans index.theme.
+// subdir is an icon directory declared in index.theme.
 type subdir struct {
 	path               string
 	size, min, max, th int
-	typ                string // Fixed, Scalable ou Threshold
+	typ                string // Fixed, Scalable or Threshold
 }
 
-// distance suit DirectorySizeDistance de la spécification Icon Theme.
+// distance follows DirectorySizeDistance from the Icon Theme specification.
 func (d subdir) distance(size int) int {
 	switch d.typ {
 	case "Fixed":
@@ -50,7 +50,7 @@ func abs(n int) int {
 	return n
 }
 
-// theme est un thème d'icônes, éventuellement réparti sur plusieurs bases.
+// theme is an icon theme, possibly spread over several base directories.
 type theme struct {
 	name     string
 	roots    []string
@@ -58,7 +58,7 @@ type theme struct {
 	inherits []string
 }
 
-// loadTheme lit index.theme ; renvoie nil si le thème n'existe pas.
+// loadTheme reads index.theme; it returns nil if the theme does not exist.
 func loadTheme(name string, bases []string) *theme {
 	t := &theme{name: name}
 	var index string
@@ -88,7 +88,7 @@ func loadTheme(name string, bases []string) *theme {
 	for _, p := range append(splitList(head["Directories"]), splitList(head["ScaledDirectories"])...) {
 		s := sections[p]
 		if s == nil || atoi(s["Scale"], 1) != 1 {
-			continue // on vise une échelle 1, l'image est ensuite redimensionnée
+			continue // we target scale 1, the image is resized afterwards
 		}
 		size := atoi(s["Size"], 0)
 		t.dirs = append(t.dirs, subdir{
@@ -103,8 +103,8 @@ func loadTheme(name string, bases []string) *theme {
 	return t
 }
 
-// find renvoie les fichiers candidats pour une icône, du plus proche de la
-// taille demandée au plus éloigné.
+// find returns candidate files for an icon, from the closest to the
+// requested size to the farthest.
 func (t *theme) find(name string, size int) []string {
 	type cand struct {
 		path string
@@ -129,7 +129,7 @@ func (t *theme) find(name string, size int) []string {
 	return out
 }
 
-// themeChain charge un thème, ses parents (Inherits) puis hicolor.
+// themeChain loads a theme, its parents (Inherits), then hicolor.
 func themeChain(name string, bases []string) []*theme {
 	var chain []*theme
 	seen := map[string]bool{}
@@ -155,7 +155,7 @@ func themeChain(name string, bases []string) []*theme {
 	return chain
 }
 
-// currentThemeName devine le thème d'icônes de l'utilisateur.
+// currentThemeName guesses the user's icon theme.
 func currentThemeName() string {
 	if n := os.Getenv("XORWAY_ICON_THEME"); n != "" {
 		return n
@@ -170,7 +170,7 @@ func currentThemeName() string {
 				}
 			}
 		}
-		return "breeze" // valeur par défaut de Plasma
+		return "breeze" // Plasma default
 	}
 	if strings.Contains(desktop, "GNOME") {
 		out, err := exec.Command("gsettings", "get", "org.gnome.desktop.interface", "icon-theme").Output()
@@ -184,7 +184,7 @@ func currentThemeName() string {
 	return "hicolor"
 }
 
-// parseINI lit un fichier de type .desktop / index.theme.
+// parseINI reads a .desktop / index.theme style file.
 func parseINI(path string) (map[string]map[string]string, error) {
 	f, err := os.Open(path)
 	if err != nil {

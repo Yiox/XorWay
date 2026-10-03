@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Package appicon retrouve l'icône d'une application (fichier .desktop puis
-// thème d'icônes freedesktop) et la rend en PNG carré, sans CGO.
+// Package appicon finds the icon of an application (.desktop file, then
+// freedesktop icon theme) and renders it as a square PNG, without CGO.
 package appicon
 
 import (
@@ -34,17 +34,17 @@ type result struct {
 	png []byte
 }
 
-// Resolver résout et met en cache les icônes par app id et par taille.
+// Resolver resolves and caches icons by app id and size.
 type Resolver struct {
 	idx   *desktop.Index
 	bases []string
 	chain []*theme
 
 	mu    sync.Mutex
-	cache map[key]*result // une entrée nil mémorise un échec
+	cache map[key]*result // a nil entry records a failure
 }
 
-// New crée un résolveur pour le thème d'icônes courant.
+// New creates a resolver for the current icon theme.
 func New(idx *desktop.Index) *Resolver {
 	var bases []string
 	if h, err := os.UserHomeDir(); err == nil {
@@ -61,7 +61,7 @@ func New(idx *desktop.Index) *Resolver {
 	}
 }
 
-// Image renvoie l'icône de l'application, ou nil si introuvable.
+// Image returns the application icon, or nil if not found.
 func (r *Resolver) Image(appID string, size int) image.Image {
 	if res := r.lookup(appID, size); res != nil {
 		return res.img
@@ -69,7 +69,7 @@ func (r *Resolver) Image(appID string, size int) image.Image {
 	return nil
 }
 
-// PNG renvoie l'icône encodée en PNG, ou nil si introuvable.
+// PNG returns the icon encoded as PNG, or nil if not found.
 func (r *Resolver) PNG(appID string, size int) []byte {
 	if res := r.lookup(appID, size); res != nil {
 		return res.png
@@ -77,10 +77,10 @@ func (r *Resolver) PNG(appID string, size int) []byte {
 	return nil
 }
 
-// genericKey est la clé de cache de l'icône générique.
+// genericKey is the cache key of the generic icon.
 const genericKey = "\x00generic"
 
-// Generic renvoie l'icône générique d'application du thème, en PNG.
+// Generic returns the theme's generic application icon, as PNG.
 func (r *Resolver) Generic(size int) []byte {
 	if res := r.lookup(genericKey, size); res != nil {
 		return res.png
@@ -109,7 +109,7 @@ func (r *Resolver) lookup(appID string, size int) *result {
 	return res
 }
 
-// names liste les noms d'icône plausibles, du plus fiable au moins fiable.
+// names lists plausible icon names, from most to least reliable.
 func (r *Resolver) names(appID string) (names []string, file string) {
 	add := func(n string) {
 		for _, x := range names {
@@ -129,7 +129,7 @@ func (r *Resolver) names(appID string) (names []string, file string) {
 		}
 	}
 	lower := strings.ToLower(appID)
-	// Steam installe les icônes de jeux sous le nom steam_icon_<appid>.
+	// Steam installs game icons as steam_icon_<appid>.
 	if id, ok := strings.CutPrefix(lower, "steam_app_"); ok {
 		add("steam_icon_" + id)
 	}
@@ -154,7 +154,7 @@ func (r *Resolver) resolve(appID string, size int) image.Image {
 	return r.resolveNames(names, size)
 }
 
-// resolveNames cherche chaque nom dans toute la chaîne de thèmes, puis dans
+// resolveNames looks up each name in the whole theme chain, then in
 // /usr/share/pixmaps.
 func (r *Resolver) resolveNames(names []string, size int) image.Image {
 	for _, n := range names {
@@ -174,7 +174,7 @@ func (r *Resolver) resolveNames(names []string, size int) image.Image {
 	return nil
 }
 
-// load lit un PNG/JPEG ou rasterise un SVG, au format size×size.
+// load reads a PNG/JPEG or rasterizes an SVG, at size×size.
 func load(path string, size int) (image.Image, error) {
 	if strings.EqualFold(filepath.Ext(path), ".svg") {
 		return rasterSVG(path, size)
@@ -191,7 +191,7 @@ func load(path string, size int) (image.Image, error) {
 	return fit(src, size), nil
 }
 
-// fit redimensionne en conservant les proportions, centré dans un carré.
+// fit resizes while keeping the aspect ratio, centered in a square.
 func fit(src image.Image, size int) image.Image {
 	b := src.Bounds()
 	if b.Dx() == size && b.Dy() == size {
@@ -210,10 +210,10 @@ func fit(src image.Image, size int) image.Image {
 }
 
 func rasterSVG(path string, size int) (img image.Image, err error) {
-	// oksvg peut paniquer sur certains SVG exotiques.
+	// oksvg may panic on some unusual SVG files.
 	defer func() {
 		if p := recover(); p != nil {
-			img, err = nil, fmt.Errorf("svg %s : %v", path, p)
+			img, err = nil, fmt.Errorf("svg %s: %v", path, p)
 		}
 	}()
 	icon, err := oksvg.ReadIcon(path, oksvg.IgnoreErrorMode)
@@ -225,7 +225,7 @@ func rasterSVG(path string, size int) (img image.Image, err error) {
 	scanner := rasterx.NewScannerGV(size, size, rgba, rgba.Bounds())
 	icon.Draw(rasterx.NewDasher(size, size, scanner), 1)
 	if blank(rgba) {
-		return nil, errors.New("svg non pris en charge (rendu vide)")
+		return nil, errors.New("unsupported svg (empty rendering)")
 	}
 	return rgba, nil
 }

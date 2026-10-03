@@ -1,12 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Package tray affiche l'état des fenêtres dans une icône StatusNotifierItem.
+// Package tray shows the window state in a StatusNotifierItem icon.
 package tray
 
 import (
 	"cmp"
 	"errors"
-	"fmt"
 	"slices"
 	"strings"
 
@@ -14,26 +13,27 @@ import (
 
 	"xorway/internal/backend"
 	"xorway/internal/game"
+	"xorway/internal/i18n"
 )
 
 const (
-	maxLabel = 70 // longueur maximale (en runes) d'une entrée du menu
-	IconSize = 32 // taille des icônes d'applications dans le menu
+	maxLabel = 70 // maximum length (in runes) of a menu entry
+	IconSize = 32 // size of application icons in the menu
 )
 
-// Actions des entrées cliquables.
+// Actions of clickable entries.
 const (
 	actionNone = iota
 	actionQuit
 	actionToggleNotify
 )
 
-// entry est une ligne du menu ; la valeur zéro est un séparateur.
+// entry is a menu line; the zero value is a separator.
 type entry struct {
 	title    string
 	tooltip  string
 	disabled bool
-	icon     string // app id dont on affiche l'icône ("" : aucune)
+	icon     string // app id whose icon is shown ("" for none)
 	action   int
 	checkbox bool
 	checked  bool
@@ -41,51 +41,51 @@ type entry struct {
 
 var separator = entry{}
 
-// sameShape indique si deux entrées peuvent être mises à jour sur place.
+// sameShape reports whether an entry can be updated in place.
 func sameShape(a, b entry) bool {
 	return (a == separator) == (b == separator) && a.action == b.action && a.checkbox == b.checkbox
 }
 
-// Options configure le tray.
+// Options configures the tray.
 type Options struct {
 	BackendName string
-	// Icons renvoie l'icône PNG d'une application (nil si introuvable).
+	// Icons returns the PNG icon of an application (nil if not found).
 	Icons func(appID string) []byte
-	// GenericIcon remplace une icône introuvable.
+	// GenericIcon replaces an icon that cannot be found.
 	GenericIcon []byte
-	// NotifyGames renvoie l'état de la case « Notifier… » ; nil la masque.
+	// NotifyGames returns the state of the "Notify…" checkbox; nil hides it.
 	NotifyGames func() bool
-	// OnToggleNotify est appelé quand l'utilisateur coche ou décoche la case.
+	// OnToggleNotify is called when the user toggles the checkbox.
 	OnToggleNotify func()
 }
 
-// Tray pilote l'icône et le menu. Init puis Update doivent être appelés
-// depuis une même goroutine, après le démarrage de systray.
+// Tray drives the icon and the menu. Init then Update must be called from a
+// single goroutine, after systray has started.
 type Tray struct {
 	opts        Options
 	lastState   iconState
 	lastTooltip string
 	lastMenu    []entry
-	items       []*systray.MenuItem // nil pour les séparateurs
+	items       []*systray.MenuItem // nil for separators
 }
 
-// New crée le tray.
+// New creates the tray.
 func New(opts Options) *Tray {
 	return &Tray{opts: opts, lastState: -1}
 }
 
-// Init pose l'icône et un menu d'attente.
+// Init sets the icon and a placeholder menu.
 func (t *Tray) Init() {
 	systray.SetTitle("XorWay")
 	t.setIcon(stateNative)
-	t.setTooltip("XorWay — chargement…")
-	t.setMenu([]entry{{title: "Chargement…", disabled: true}})
+	t.setTooltip("XorWay — " + i18n.T("status.loading"))
+	t.setMenu([]entry{{title: i18n.T("status.loading"), disabled: true}})
 }
 
-// Update reflète un nouvel état (ou une erreur du backend).
+// Update reflects a new state (or a backend error).
 func (t *Tray) Update(snap backend.Snapshot, err error) {
 	if errors.Is(err, backend.ErrPending) {
-		return // l'état « Chargement… » posé par Init reste affiché
+		return // the "Loading…" state set by Init stays visible
 	}
 	if err != nil {
 		t.setIcon(stateError)
@@ -104,18 +104,18 @@ func (t *Tray) Update(snap backend.Snapshot, err error) {
 	}
 
 	if snap.NativeKnown {
-		t.setTooltip(fmt.Sprintf("XorWay — %d XWayland, %d Wayland natif", nX, nW))
+		t.setTooltip("XorWay — " + i18n.T("tooltip.counts", "XWayland", nX, "Native", nW))
 	} else {
-		t.setTooltip(fmt.Sprintf("XorWay — %d fenêtre(s) XWayland", nX))
+		t.setTooltip("XorWay — " + i18n.N("tooltip.xwayland_only", nX))
 	}
 
 	var menu []entry
 	if snap.NativeKnown {
-		menu = append(menu, entry{title: fmt.Sprintf("Wayland natif (%d)", nW), disabled: true})
+		menu = append(menu, entry{title: i18n.T("menu.native_header", "Count", nW), disabled: true})
 		menu = append(menu, windowEntries(snap.Windows, backend.Wayland)...)
 		menu = append(menu, separator)
 	}
-	menu = append(menu, entry{title: fmt.Sprintf("XWayland (%d)", nX), disabled: true})
+	menu = append(menu, entry{title: i18n.T("menu.xwayland_header", "Count", nX), disabled: true})
 	menu = append(menu, windowEntries(snap.Windows, backend.XWayland)...)
 	if snap.Notice != "" {
 		menu = append(menu, separator, entry{title: "ℹ " + snap.Notice, disabled: true})
@@ -138,22 +138,22 @@ func windowEntries(ws []backend.Window, typ backend.ClientType) []entry {
 	})
 
 	if len(sel) == 0 {
-		return []entry{{title: "(aucune)", disabled: true}}
+		return []entry{{title: i18n.T("menu.none"), disabled: true}}
 	}
 	out := make([]entry, 0, len(sel))
 	for _, w := range sel {
 		title := w.Title
 		if title == "" {
-			title = "(sans titre)"
+			title = i18n.T("menu.untitled")
 		}
 		label := title
 		if w.AppID != "" {
 			label = title + " — " + w.AppID
 		}
-		tip := fmt.Sprintf("%s\napp : %s\nPID : %d", title, w.AppID, w.PID)
+		tip := title + "\n" + i18n.T("tooltip.window", "App", w.AppID, "PID", w.PID)
 		if w.Game != game.None {
 			label = "🎮 " + label
-			tip += "\nJeu détecté : " + w.Game.String()
+			tip += "\n" + i18n.T("tooltip.game", "Source", w.Game.String())
 		}
 		out = append(out, entry{title: truncate(label, maxLabel), tooltip: tip, icon: w.AppID})
 	}
@@ -168,7 +168,7 @@ func truncate(s string, n int) string {
 	return string(r[:n-1]) + "…"
 }
 
-// escape protège les « _ », interprétés comme mnémoniques par dbusmenu.
+// escape protects "_", which dbusmenu treats as a mnemonic marker.
 func escape(s string) string { return strings.ReplaceAll(s, "_", "__") }
 
 func (t *Tray) setIcon(st iconState) {
@@ -187,25 +187,25 @@ func (t *Tray) setTooltip(s string) {
 	systray.SetTooltip(s)
 }
 
-// footer ajoute les entrées fixes en bas du menu.
+// footer appends the fixed entries at the bottom of the menu.
 func (t *Tray) footer(menu []entry) []entry {
 	menu = append(menu, separator)
 	if t.opts.NotifyGames != nil {
 		menu = append(menu, entry{
-			title:    "Notifier les jeux lancés sous XWayland",
+			title:    i18n.T("menu.notify_games"),
 			action:   actionToggleNotify,
 			checkbox: true,
 			checked:  t.opts.NotifyGames(),
 		})
 	}
 	return append(menu,
-		entry{title: "Backend : " + t.opts.BackendName, disabled: true},
-		entry{title: "Quitter", action: actionQuit},
+		entry{title: i18n.T("menu.backend", "Name", t.opts.BackendName), disabled: true},
+		entry{title: i18n.T("menu.quit"), action: actionQuit},
 	)
 }
 
-// setMenu met le menu à jour : sur place si sa structure n'a pas changé
-// (cas courant d'un titre qui change), sinon en le reconstruisant.
+// setMenu updates the menu: in place when its structure is unchanged (the
+// common case of a changing title), otherwise by rebuilding it.
 func (t *Tray) setMenu(menu []entry) {
 	menu = t.footer(menu)
 	if slices.Equal(menu, t.lastMenu) {
@@ -282,8 +282,8 @@ func (t *Tray) appIcon(appID string) []byte {
 	return t.opts.GenericIcon
 }
 
-// listen exécute l'action à chaque clic. ResetMenu ferme le canal, ce qui
-// termine la goroutine.
+// listen runs the action on every click. ResetMenu closes the channel, which
+// ends the goroutine.
 func (t *Tray) listen(item *systray.MenuItem, action int) {
 	var f func()
 	switch action {

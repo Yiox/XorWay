@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Package notify envoie des notifications de bureau via
+// Package notify sends desktop notifications through
 // org.freedesktop.Notifications.
 package notify
 
@@ -18,29 +18,29 @@ const (
 	method  = service + ".Notify"
 )
 
-// Notification décrit une notification à afficher.
+// Notification describes a notification to show.
 type Notification struct {
 	Summary string
 	Body    string
-	Icon    string      // nom d'icône du thème (repli si Image est nil)
-	Image   image.Image // image affichée dans la notification (optionnelle)
+	Icon    string      // theme icon name (fallback when Image is nil)
+	Image   image.Image // image shown in the notification (optional)
 }
 
-// Client parle au serveur de notifications du bureau.
+// Client talks to the desktop notification server.
 type Client struct {
 	conn *dbus.Conn
 }
 
-// New ouvre une connexion dédiée au bus de session.
+// New opens a dedicated session bus connection.
 func New() (*Client, error) {
 	conn, err := dbus.ConnectSessionBus()
 	if err != nil {
-		return nil, fmt.Errorf("notifications : %w", err)
+		return nil, fmt.Errorf("notifications: %w", err)
 	}
 	return &Client{conn: conn}, nil
 }
 
-// imageData est le format de l'indice « image-data » : (iiibiiay).
+// imageData is the format of the "image-data" hint: (iiibiiay).
 type imageData struct {
 	Width, Height, Rowstride int32
 	HasAlpha                 bool
@@ -58,11 +58,11 @@ func toImageData(img image.Image) imageData {
 	}
 }
 
-// Send affiche la notification.
+// Send shows the notification.
 func (c *Client) Send(n Notification) error {
 	hints := map[string]dbus.Variant{
 		"desktop-entry": dbus.MakeVariant("xorway"),
-		"urgency":       dbus.MakeVariant(byte(1)), // normale
+		"urgency":       dbus.MakeVariant(byte(1)), // normal
 	}
 	if n.Image != nil {
 		hints["image-data"] = dbus.MakeVariant(toImageData(n.Image))
@@ -72,10 +72,10 @@ func (c *Client) Send(n Notification) error {
 		"XorWay", uint32(0), n.Icon, n.Summary, n.Body,
 		[]string{}, hints, int32(-1))
 	if call.Err != nil {
-		return fmt.Errorf("notifications : %w", call.Err)
+		return fmt.Errorf("notifications: %w", call.Err)
 	}
 	return nil
 }
 
-// Close ferme la connexion.
+// Close closes the connection.
 func (c *Client) Close() error { return c.conn.Close() }

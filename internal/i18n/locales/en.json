@@ -1,0 +1,65 @@
+{
+  "status.loading": "Loading…",
+
+  "backend.x11": "X11 (fallback)",
+  "notice.x11_only": "Fallback backend: only XWayland windows are visible",
+  "notice.cross_check": "Classification by X11 cross-check (heuristic)",
+
+  "menu.native_header": "Native Wayland ({{.Count}})",
+  "menu.xwayland_header": "XWayland ({{.Count}})",
+  "menu.none": "(none)",
+  "menu.untitled": "(untitled)",
+  "menu.notify_games": "Notify when a game runs under XWayland",
+  "menu.backend": "Backend: {{.Name}}",
+  "menu.quit": "Quit",
+
+  "tooltip.counts": "{{.XWayland}} XWayland, {{.Native}} native Wayland",
+  "tooltip.xwayland_only": {
+    "one": "{{.Count}} XWayland window",
+    "other": "{{.Count}} XWayland windows"
+  },
+  "tooltip.window": "App: {{.App}}\nPID: {{.PID}}",
+  "tooltip.game": "Game detected: {{.Source}}",
+
+  "game.source.catalog": "Game category",
+  "game.hint.proton": "Proton ≥ 10: add “PROTON_ENABLE_WAYLAND=1 %command%” to the Steam launch options.",
+  "game.hint.wine": "Wine ≥ 9 can use its Wayland driver (winewayland): check the launcher settings.",
+  "game.hint.sdl": "If the game uses SDL, try SDL_VIDEODRIVER=wayland.",
+
+  "notify.game.summary": "Game running under X11",
+  "notify.game.body": "“{{.Name}}” ({{.Source}}) runs under XWayland instead of native Wayland.",
+
+  "error.already_running": "XorWay is already running",
+  "error.unknown_backend": "unknown backend “{{.Name}}”",
+  "error.session_bus": "cannot connect to the session bus: {{.Err}}",
+  "error.dbus_name": "cannot reserve the D-Bus name {{.Name}}: {{.Err}}",
+  "error.dbus_export": "cannot export the D-Bus object: {{.Err}}",
+  "error.create_dir": "cannot create {{.Path}}: {{.Err}}",
+  "error.kwin_missing": "KWin not found on D-Bus (a KDE Plasma session is required)",
+  "error.kwin_scripting": "KWin scripting API unavailable: {{.Err}}",
+  "error.kwin_script_write": "cannot write the KWin script: {{.Err}}",
+  "error.kwin_script_load": "cannot load the KWin script: {{.Err}}",
+  "error.kwin_script_refused": "KWin refused the XorWay script",
+  "error.kwin_script_run": "cannot run the KWin script: {{.Err}}",
+  "error.kwin_script_timeout": "the KWin script does not respond (journalctl --user -g xorway)",
+  "error.x11_no_display": "DISPLAY is not set (is Xwayland disabled?)",
+  "error.x11_connect": "cannot connect to Xwayland ({{.Display}}): {{.Err}}",
+  "error.x11_client_list": "cannot read the X11 window list: {{.Err}}",
+  "error.x11_lost": "connection to Xwayland lost",
+  "error.install_self": "cannot locate the running executable: {{.Err}}",
+  "error.install_copy": "cannot copy the binary: {{.Err}}",
+
+  "cli.usage": "Usage:\n  xorway [options]          run the daemon (system tray icon)\n  xorway install [--no-autostart]\n                            install this binary for the current user\n                            (~/.local/bin, launcher, autostart)\n  xorway uninstall          uninstall (the configuration is kept)\n  xorway version            print the version\n\nDaemon options:\n",
+  "cli.flag.backend": "backend to use: auto, kwin, x11",
+  "cli.flag.interval": "fallback polling interval",
+  "cli.flag.debug": "verbose logging",
+  "cli.flag.lang": "interface language ({{.Languages}}); default: automatic",
+  "cli.flag.no_autostart": "do not start XorWay when the session opens",
+
+  "install.binary": "binary      : {{.Path}}",
+  "install.launcher": "launcher    : {{.Path}}",
+  "install.autostart": "autostart   : {{.Path}}",
+  "install.removed": "removed     : {{.Path}}",
+  "install.done": "XorWay is installed. Start it from the application menu or with “xorway”.",
+  "install.uninstalled": "XorWay is uninstalled. Quit the running instance from its menu if needed."
+}

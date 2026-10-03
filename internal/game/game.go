@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Package game devine si une fenêtre appartient à un jeu vidéo.
+// Package game guesses whether a window belongs to a video game.
 //
-// Les indices utilisés, du plus au moins fiable :
-//   - classe de fenêtre steam_app_<id> (jeux Steam, en particulier Proton) ;
-//   - variable SteamAppId / SteamGameId dans l'environnement du processus ;
-//   - processus Wine/Proton (exécutable wine*, ou commande en .exe) ;
-//   - catégorie « Game » dans le fichier .desktop de l'application.
+// Clues, from most to least reliable:
+//   - window class steam_app_<id> (Steam games, Proton in particular);
+//   - SteamAppId / SteamGameId in the process environment;
+//   - Wine/Proton process (wine* executable, or a command ending in .exe);
+//   - "Game" category in the application's .desktop file.
 package game
 
 import (
@@ -18,19 +18,37 @@ import (
 	"sync"
 
 	"xorway/internal/desktop"
+	"xorway/internal/i18n"
 )
 
-// Source indique comment un jeu a été reconnu.
+// Source tells how a game was recognized.
 type Source int
 
 const (
 	None    Source = iota
-	Steam          // jeu Steam natif Linux
-	Proton         // jeu Steam via Proton
-	Wine           // application Windows via Wine (Lutris, Heroic, Bottles…)
-	Catalog        // catégorie Game du fichier .desktop
+	Steam          // native Linux Steam game
+	Proton         // Steam game through Proton
+	Wine           // Windows application through Wine (Lutris, Heroic, Bottles…)
+	Catalog        // Game category of the .desktop file
 )
 
+// Key returns a stable, untranslated identifier (for logs).
+func (s Source) Key() string {
+	switch s {
+	case Steam:
+		return "steam"
+	case Proton:
+		return "proton"
+	case Wine:
+		return "wine"
+	case Catalog:
+		return "catalog"
+	default:
+		return "none"
+	}
+}
+
+// String returns the translated name of the source.
 func (s Source) String() string {
 	switch s {
 	case Steam:
@@ -40,27 +58,27 @@ func (s Source) String() string {
 	case Wine:
 		return "Wine"
 	case Catalog:
-		return "catégorie Game"
+		return i18n.T("game.source.catalog")
 	default:
 		return ""
 	}
 }
 
-// Hint propose un moyen de lancer le jeu en Wayland natif.
+// Hint suggests a way to run the game as a native Wayland client.
 func (s Source) Hint() string {
 	switch s {
 	case Proton:
-		return "Proton ≥ 10 : ajoutez « PROTON_ENABLE_WAYLAND=1 %command% » aux options de lancement Steam."
+		return i18n.T("game.hint.proton")
 	case Wine:
-		return "Wine ≥ 9 peut utiliser son pilote Wayland (winewayland) : vérifiez la configuration du lanceur."
+		return i18n.T("game.hint.wine")
 	case Steam, Catalog:
-		return "Si le jeu utilise SDL, essayez SDL_VIDEODRIVER=wayland."
+		return i18n.T("game.hint.sdl")
 	default:
 		return ""
 	}
 }
 
-// Clients Steam et utilitaires qui ne sont pas des jeux.
+// Steam clients and launchers that are not games.
 var notGames = map[string]bool{
 	"steam":                       true,
 	"steamwebhelper":              true,
@@ -75,7 +93,7 @@ type cacheKey struct {
 	appID string
 }
 
-// Detector met en cache la détection par (PID, app id).
+// Detector caches detection results by (PID, app id).
 type Detector struct {
 	idx *desktop.Index
 
@@ -83,12 +101,12 @@ type Detector struct {
 	cache map[cacheKey]Source
 }
 
-// NewDetector crée un détecteur s'appuyant sur l'index .desktop.
+// NewDetector creates a detector backed by the .desktop index.
 func NewDetector(idx *desktop.Index) *Detector {
 	return &Detector{idx: idx, cache: map[cacheKey]Source{}}
 }
 
-// Detect renvoie la source de détection, ou None si ce n'est pas un jeu.
+// Detect returns how the game was detected, or None if it is not a game.
 func (d *Detector) Detect(appID string, pid int) Source {
 	k := cacheKey{pid, appID}
 	d.mu.Lock()
@@ -101,7 +119,7 @@ func (d *Detector) Detect(appID string, pid int) Source {
 	return s
 }
 
-// Prune oublie les entrées absentes de keep (PID réutilisés, etc.).
+// Prune forgets entries rejected by keep (reused PIDs, etc.).
 func (d *Detector) Prune(keep func(pid int, appID string) bool) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
@@ -141,7 +159,7 @@ func (d *Detector) detect(appID string, pid int) Source {
 	return None
 }
 
-// steamID indique si le processus a été lancé par Steam pour un jeu.
+// steamID reports whether Steam launched the process for a game.
 func steamID(env map[string]string) bool {
 	for _, k := range []string{"SteamAppId", "SteamGameId"} {
 		if v := env[k]; v != "" && v != "0" {
@@ -151,7 +169,7 @@ func steamID(env map[string]string) bool {
 	return false
 }
 
-// environ lit /proc/<pid>/environ (lisible pour les processus de l'utilisateur).
+// environ reads /proc/<pid>/environ (readable for the user's own processes).
 func environ(pid int) map[string]string {
 	env := map[string]string{}
 	if pid <= 0 {
@@ -169,8 +187,8 @@ func environ(pid int) map[string]string {
 	return env
 }
 
-// isWine reconnaît un processus Wine : exécutable wine*/…-preloader, ou
-// premier argument se terminant par .exe.
+// isWine recognizes a Wine process: wine*/…-preloader executable, or a first
+// argument ending in .exe.
 func isWine(pid int) bool {
 	if pid <= 0 {
 		return false

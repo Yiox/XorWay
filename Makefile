@@ -8,7 +8,7 @@ VERSION    ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo d
 BIN        := bin/xorway
 DESKTOP    := internal/install/xorway.desktop
 
-.PHONY: all build run vet fmt install uninstall clean
+.PHONY: all build run vet test fmt install uninstall clean
 
 all: build
 
@@ -21,6 +21,9 @@ run: build
 vet:
 	$(GO) vet ./...
 
+test:
+	$(GO) test ./...
+
 fmt:
 	gofmt -w cmd internal
 
@@ -30,7 +33,7 @@ install: build
 	install -Dm644 xorway.desktop.tmp $(DESTDIR)$(AUTOSTART)/xorway.desktop
 	install -Dm644 xorway.desktop.tmp $(DESTDIR)$(APPDIR)/xorway.desktop
 	rm -f xorway.desktop.tmp
-	@echo "XorWay installé dans $(BINDIR) ; démarrage automatique à la prochaine session."
+	@echo "XorWay installed in $(BINDIR); it will start automatically with the next session."
 
 uninstall:
 	-pkill -x xorway

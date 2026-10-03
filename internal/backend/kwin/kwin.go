@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Package kwin est le backend KDE Plasma 6 : un script KWin, chargé via
-// D-Bus, pousse la liste des fenêtres vers le daemon.
+// Package kwin is the KDE Plasma 6 backend: a KWin script, loaded over
+// D-Bus, pushes the window list to the daemon.
 package kwin
 
 import (
@@ -20,6 +20,7 @@ import (
 	"github.com/godbus/dbus/v5"
 
 	"xorway/internal/backend"
+	"xorway/internal/i18n"
 	"xorway/internal/x11"
 )
 
@@ -35,42 +36,42 @@ const (
 	scripting   = "org.kde.kwin.Scripting"
 	pluginName  = "xorway"
 
-	// scriptTimeout : délai au-delà duquel l'absence de données du script
-	// est signalée comme une erreur.
+	// scriptTimeout is the delay after which missing data from the script
+	// is reported as an error.
 	scriptTimeout = 5 * time.Second
 )
 
-// window est une fenêtre telle que décrite par le script KWin.
+// window is a window as described by the KWin script.
 type window struct {
 	ID            string `json:"id"`
 	Title         string `json:"title"`
 	ResourceClass string `json:"resourceClass"`
 	DesktopFile   string `json:"desktopFile"`
 	PID           int    `json:"pid"`
-	Kind          string `json:"kind"` // classe C++ KWin, ex. KWin::X11Window
+	Kind          string `json:"kind"` // KWin C++ class, e.g. KWin::X11Window
 }
 
-// Backend implémente backend.Backend pour KWin.
+// Backend implements backend.Backend for KWin.
 type Backend struct {
 	display    string
 	changes    chan struct{}
 	conn       *dbus.Conn
-	kwinOwner  string // nom unique de KWin, seul expéditeur accepté
+	kwinOwner  string // unique bus name of KWin, the only accepted sender
 	scriptPath string
 
 	mu       sync.Mutex
-	err      error // erreur fatale de démarrage
+	err      error // fatal startup error
 	started  time.Time
 	received bool
 	windows  []window
 
-	// Croisement X11, démarré seulement si une classe KWin est inconnue.
+	// X11 cross-check, started only when a KWin class is unknown.
 	ctx     context.Context
 	monOnce sync.Once
 	mon     *x11.Monitor
 }
 
-// New crée le backend. display sert au croisement X11 de secours.
+// New creates the backend. display is used by the fallback X11 cross-check.
 func New(display string) *Backend {
 	return &Backend{display: display, changes: make(chan struct{}, 1)}
 }
@@ -86,7 +87,7 @@ func (b *Backend) notify() {
 	}
 }
 
-// Start enregistre le service D-Bus du daemon puis charge le script KWin.
+// Start registers the daemon D-Bus service, then loads the KWin script.
 func (b *Backend) Start(ctx context.Context) error {
 	b.mu.Lock()
 	b.ctx = ctx
@@ -105,23 +106,24 @@ func (b *Backend) Start(ctx context.Context) error {
 func (b *Backend) start() error {
 	conn, err := dbus.ConnectSessionBus()
 	if err != nil {
-		return fmt.Errorf("connexion au bus de session impossible : %w", err)
+		return i18n.Wrap(err, "error.session_bus")
 	}
 	b.conn = conn
 
 	if err := conn.BusObject().Call("org.freedesktop.DBus.GetNameOwner", 0, kwinService).Store(&b.kwinOwner); err != nil {
-		return errors.New("KWin introuvable sur D-Bus (session KDE Plasma requise)")
+		return i18n.NewError("error.kwin_missing")
 	}
 
 	reply, err := conn.RequestName(busName, dbus.NameFlagDoNotQueue)
 	if err != nil {
-		return fmt.Errorf("réservation du nom %s : %w", busName, err)
+		return i18n.Wrap(err, "error.dbus_name", "Name", busName)
 	}
 	if reply != dbus.RequestNameReplyPrimaryOwner {
-		return fmt.Errorf("%w (nom D-Bus %s occupé)", backend.ErrAlreadyRunning, busName)
+		slog.Debug("kwin: D-Bus name already taken", "name", busName)
+		return backend.ErrAlreadyRunning
 	}
 	if err := conn.Export(receiver{b}, objectPath, iface); err != nil {
-		return fmt.Errorf("export D-Bus : %w", err)
+		return i18n.Wrap(err, "error.dbus_export")
 	}
 
 	if b.scriptPath, err = writeScript(); err != nil {
@@ -130,7 +132,7 @@ func (b *Backend) start() error {
 	return b.loadScript()
 }
 
-// writeScript copie le script embarqué dans $XDG_RUNTIME_DIR/xorway/.
+// writeScript copies the embedded script to $XDG_RUNTIME_DIR/xorway/.
 func writeScript() (string, error) {
 	dir := os.Getenv("XDG_RUNTIME_DIR")
 	if dir == "" {
@@ -138,11 +140,11 @@ func writeScript() (string, error) {
 	}
 	dir = filepath.Join(dir, "xorway")
 	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return "", fmt.Errorf("création de %s : %w", dir, err)
+		return "", i18n.Wrap(err, "error.create_dir", "Path", dir)
 	}
 	path := filepath.Join(dir, "xorway.js")
 	if err := os.WriteFile(path, script, 0o600); err != nil {
-		return "", fmt.Errorf("écriture du script KWin : %w", err)
+		return "", i18n.Wrap(err, "error.kwin_script_write")
 	}
 	return path, nil
 }
@@ -150,10 +152,10 @@ func writeScript() (string, error) {
 func (b *Backend) loadScript() error {
 	obj := b.conn.Object(kwinService, "/Scripting")
 
-	// Un script peut rester chargé après un arrêt brutal du daemon.
+	// A script may still be loaded after the daemon crashed.
 	var loaded bool
 	if err := obj.Call(scripting+".isScriptLoaded", 0, pluginName).Store(&loaded); err != nil {
-		return fmt.Errorf("API de scripting KWin indisponible : %w", err)
+		return i18n.Wrap(err, "error.kwin_scripting")
 	}
 	if loaded {
 		b.unloadScript()
@@ -161,29 +163,29 @@ func (b *Backend) loadScript() error {
 
 	var id int32
 	if err := obj.Call(scripting+".loadScript", 0, b.scriptPath, pluginName).Store(&id); err != nil {
-		return fmt.Errorf("chargement du script KWin : %w", err)
+		return i18n.Wrap(err, "error.kwin_script_load")
 	}
 	if id < 0 {
-		return errors.New("KWin a refusé le script XorWay")
+		return i18n.NewError("error.kwin_script_refused")
 	}
 
 	script := b.conn.Object(kwinService, dbus.ObjectPath(fmt.Sprintf("/Scripting/Script%d", id)))
 	if err := script.Call("org.kde.kwin.Script.run", 0).Err; err != nil {
 		b.unloadScript()
-		return fmt.Errorf("exécution du script KWin : %w", err)
+		return i18n.Wrap(err, "error.kwin_script_run")
 	}
-	slog.Debug("kwin: script chargé", "id", id, "path", b.scriptPath)
+	slog.Debug("kwin: script loaded", "id", id, "path", b.scriptPath)
 	return nil
 }
 
 func (b *Backend) unloadScript() {
 	obj := b.conn.Object(kwinService, "/Scripting")
 	if err := obj.Call(scripting+".unloadScript", 0, pluginName).Err; err != nil {
-		slog.Warn("kwin: déchargement du script", "err", err)
+		slog.Warn("kwin: unloading the script", "err", err)
 	}
 }
 
-// Close décharge le script et libère le nom D-Bus.
+// Close unloads the script and releases the D-Bus name.
 func (b *Backend) Close() error {
 	if b.conn == nil {
 		return nil
@@ -195,23 +197,23 @@ func (b *Backend) Close() error {
 	return b.conn.Close()
 }
 
-// receiver est l'objet D-Bus appelé par le script KWin.
+// receiver is the D-Bus object called by the KWin script.
 type receiver struct{ b *Backend }
 
-// Update reçoit la liste des fenêtres au format JSON.
+// Update receives the window list as JSON.
 func (r receiver) Update(sender dbus.Sender, payload string) *dbus.Error {
 	if string(sender) != r.b.kwinOwner {
-		return dbus.MakeFailedError(errors.New("expéditeur non autorisé"))
+		return dbus.MakeFailedError(errors.New("sender not allowed"))
 	}
 	var ws []window
 	if err := json.Unmarshal([]byte(payload), &ws); err != nil {
-		slog.Warn("kwin: données invalides", "err", err)
+		slog.Warn("kwin: invalid data", "err", err)
 		return dbus.MakeFailedError(err)
 	}
 	r.b.mu.Lock()
 	r.b.windows, r.b.received = ws, true
 	r.b.mu.Unlock()
-	slog.Debug("kwin: mise à jour reçue", "windows", len(ws))
+	slog.Debug("kwin: update received", "windows", len(ws))
 	r.b.notify()
 	return nil
 }
@@ -226,7 +228,7 @@ func (b *Backend) Snapshot() (backend.Snapshot, error) {
 	case err != nil:
 		return backend.Snapshot{}, err
 	case !received && time.Since(started) > scriptTimeout:
-		return backend.Snapshot{}, errors.New("le script KWin ne répond pas (journalctl --user -g xorway)")
+		return backend.Snapshot{}, i18n.NewError("error.kwin_script_timeout")
 	case !received:
 		return backend.Snapshot{}, backend.ErrPending
 	}
@@ -243,12 +245,12 @@ func (b *Backend) Snapshot() (backend.Snapshot, error) {
 	}
 	if len(unknown) > 0 {
 		snap.Windows = append(snap.Windows, b.crossCheck(unknown)...)
-		snap.Notice = "Classification par croisement X11 (heuristique)"
+		snap.Notice = i18n.T("notice.cross_check")
 	}
 	return snap, nil
 }
 
-// classify déduit le type de client de la classe C++ KWin.
+// classify infers the client type from the KWin C++ class.
 func classify(kind string) (backend.ClientType, bool) {
 	switch {
 	case kind == "KWin::X11Window":
@@ -268,11 +270,11 @@ func convert(w window, typ backend.ClientType) backend.Window {
 	return backend.Window{ID: w.ID, Title: w.Title, AppID: app, PID: w.PID, Type: typ}
 }
 
-// crossCheck classe les fenêtres en les comparant aux clients Xwayland :
-// même PID, ou même classe et même titre.
+// crossCheck classifies windows by comparing them with Xwayland clients:
+// same PID, or same class and same title.
 func (b *Backend) crossCheck(ws []window) []backend.Window {
 	b.monOnce.Do(func() {
-		slog.Info("kwin: classe de fenêtre inconnue, croisement avec X11")
+		slog.Info("kwin: unknown window class, cross-checking with X11")
 		b.mon = x11.NewMonitor(b.display)
 		go b.mon.Run(b.ctx)
 		go func() {
@@ -289,7 +291,7 @@ func (b *Backend) crossCheck(ws []window) []backend.Window {
 
 	clients, err := b.mon.Clients()
 	if err != nil {
-		slog.Debug("kwin: croisement X11 impossible", "err", err)
+		slog.Debug("kwin: X11 cross-check unavailable", "err", err)
 	}
 	out := make([]backend.Window, 0, len(ws))
 	for _, w := range ws {

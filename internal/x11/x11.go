@@ -1,35 +1,35 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Package x11 liste les fenêtres gérées par le serveur Xwayland.
+// Package x11 lists the windows managed by the Xwayland server.
 //
-// Sous une session Wayland, tout client présent dans _NET_CLIENT_LIST du
-// DISPLAY Xwayland est, par définition, une fenêtre XWayland.
+// In a Wayland session, every client in _NET_CLIENT_LIST of the Xwayland
+// DISPLAY is, by definition, an XWayland window.
 package x11
 
 import (
 	"bytes"
-	"errors"
-	"fmt"
 	"strings"
 
 	"github.com/jezek/xgb"
 	"github.com/jezek/xgb/xproto"
+
+	"xorway/internal/i18n"
 )
 
-// Client décrit une fenêtre X11 de premier niveau.
+// Client describes a top-level X11 window.
 type Client struct {
 	ID       uint32
 	Title    string
-	Instance string // première partie de WM_CLASS (res_name)
-	Class    string // seconde partie de WM_CLASS (res_class)
-	PID      int    // 0 si _NET_WM_PID est absent
-	// SkipTaskbar indique une fenêtre technique, absente de la barre des
-	// tâches (ex. xwaylandvideobridge).
+	Instance string // first part of WM_CLASS (res_name)
+	Class    string // second part of WM_CLASS (res_class)
+	PID      int    // 0 when _NET_WM_PID is missing
+	// SkipTaskbar marks a technical window, hidden from the taskbar
+	// (e.g. xwaylandvideobridge).
 	SkipTaskbar bool
 }
 
-// ErrNoDisplay est renvoyée quand DISPLAY n'est pas défini.
-var ErrNoDisplay = errors.New("x11: DISPLAY non défini (Xwayland désactivé ?)")
+// ErrNoDisplay is returned when DISPLAY is not set.
+var ErrNoDisplay = i18n.NewError("error.x11_no_display")
 
 var atomNames = []string{
 	"_NET_CLIENT_LIST",
@@ -40,7 +40,7 @@ var atomNames = []string{
 	"UTF8_STRING",
 }
 
-// conn encapsule une connexion xgb et les atomes utiles.
+// conn wraps an xgb connection and the atoms we need.
 type conn struct {
 	x     *xgb.Conn
 	root  xproto.Window
@@ -53,7 +53,7 @@ func dial(display string) (*conn, error) {
 	}
 	x, err := xgb.NewConnDisplay(display)
 	if err != nil {
-		return nil, fmt.Errorf("x11: connexion à %s: %w", display, err)
+		return nil, i18n.Wrap(err, "error.x11_connect", "Display", display)
 	}
 	c := &conn{
 		x:     x,
@@ -64,7 +64,7 @@ func dial(display string) (*conn, error) {
 		r, err := xproto.InternAtom(x, false, uint16(len(name)), name).Reply()
 		if err != nil {
 			x.Close()
-			return nil, fmt.Errorf("x11: InternAtom %s: %w", name, err)
+			return nil, i18n.Wrap(err, "error.x11_connect", "Display", display)
 		}
 		c.atoms[name] = r.Atom
 	}
@@ -73,8 +73,8 @@ func dial(display string) (*conn, error) {
 
 func (c *conn) close() { c.x.Close() }
 
-// listen demande à recevoir les PropertyNotify d'une fenêtre.
-// La requête n'est pas vérifiée : la fenêtre peut disparaître entre-temps.
+// listen subscribes to PropertyNotify events of a window. The request is
+// unchecked: the window may disappear in the meantime.
 func (c *conn) listen(w xproto.Window) {
 	xproto.ChangeWindowAttributes(c.x, w, xproto.CwEventMask,
 		[]uint32{xproto.EventMaskPropertyChange})
@@ -87,7 +87,7 @@ func (c *conn) property(w xproto.Window, atom xproto.Atom) (*xproto.GetPropertyR
 func (c *conn) clientIDs() ([]xproto.Window, error) {
 	r, err := c.property(c.root, c.atoms["_NET_CLIENT_LIST"])
 	if err != nil {
-		return nil, fmt.Errorf("x11: lecture de _NET_CLIENT_LIST: %w", err)
+		return nil, i18n.Wrap(err, "error.x11_client_list")
 	}
 	if r.Format != 32 {
 		return nil, nil

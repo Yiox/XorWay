@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// XorWay — script KWin 6.
-// Envoie la liste des fenêtres au daemon (org.xorway.Daemon) à chaque
-// changement. Chargé et déchargé par le daemon via org.kde.KWin /Scripting.
+// XorWay — KWin 6 script.
+// Sends the window list to the daemon (org.xorway.Daemon) on every change.
+// Loaded and unloaded by the daemon through org.kde.KWin /Scripting.
 
 const SERVICE = "org.xorway.Daemon";
 const PATH = "/org/xorway/Daemon";
@@ -12,9 +12,9 @@ function relevant(w) {
     return (w.normalWindow || w.dialog) && !w.skipTaskbar && !w.deleted;
 }
 
-// L'API ne documente aucune propriété X11/Wayland, mais la conversion d'un
-// QObject en chaîne donne sa classe C++ : « KWin::X11Window(0x…) » pour un
-// client XWayland, « KWin::XdgToplevelWindow(0x…) » pour un client Wayland.
+// The API documents no X11/Wayland property, but converting a QObject to a
+// string gives its C++ class: "KWin::X11Window(0x…)" for an XWayland client,
+// "KWin::XdgToplevelWindow(0x…)" for a Wayland client.
 function kind(w) {
     const m = String(w).match(/^([A-Za-z_][\w:]*)\(/);
     return m ? m[1] : "";
@@ -31,7 +31,7 @@ function describe(w) {
     };
 }
 
-// excluded : fenêtre en cours de suppression, encore présente dans la liste.
+// excluded: window being removed, still present in the list.
 function send(excluded) {
     const list = workspace.windowList()
         .filter(w => w !== excluded && relevant(w))

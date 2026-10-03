@@ -1,190 +1,223 @@
 # XorWay
 
-XorWay affiche dans le systray quelles fenêtres tournent sous **XWayland** et
-lesquelles sont en **Wayland natif**, dans une session Wayland.
+XorWay shows in the system tray which windows run under **XWayland** and
+which ones are **native Wayland** clients, in a Wayland session.
 
-- Icône verte « W » : aucune fenêtre XWayland.
-- Icône orange « X » : au moins une fenêtre XWayland est ouverte.
-- Icône grise « ! » : backend indisponible (le menu explique pourquoi).
+- Green “W” icon: no XWayland window.
+- Orange “X” icon: at least one XWayland window is open.
+- Grey “!” icon: backend unavailable (the menu explains why).
 
-Le menu liste les fenêtres avec l'icône de leur application ; les jeux
-détectés sont marqués 🎮. Quand un jeu s'ouvre sous XWayland, une notification
-le signale et propose une piste pour le lancer en Wayland natif (option
-« Notifier les jeux lancés sous XWayland » du menu, mémorisée dans
+The menu lists the windows with their application icon; detected games are
+marked with 🎮. When a game opens under XWayland, a notification reports it
+and suggests a way to run it as a native Wayland client (menu option
+“Notify when a game runs under XWayland”, saved in
 `~/.config/xorway/config.json`).
 
-## Dépendances
+The interface is available in English and French (see
+[Languages](#languages)).
 
-- Go ≥ 1.22 (compilation uniquement, sans CGO)
-- Une session Wayland avec Xwayland
-- Un hôte StatusNotifierItem : natif sous KDE Plasma.
+## Requirements
+
+- Go ≥ 1.22 (build only, no CGO)
+- A Wayland session with Xwayland
+- A StatusNotifierItem host: built into KDE Plasma.
 
 ## Installation
 
-### Depuis une Release GitHub (sans compiler)
+### From a GitHub Release (no build needed)
 
-Téléchargez la dernière version sur
-<https://github.com/Yiox/XorWay/releases> :
+Download the latest version from
+<https://github.com/Yiox/XorWay/releases>:
 
-- **binaire seul** (toutes distributions, sans root) :
+- **standalone binary** (any distribution, no root):
 
   ```sh
   tar xzf xorway_*_linux_amd64.tar.gz
-  ./xorway install            # ~/.local/bin, lanceur, démarrage automatique
-  xorway                      # ou depuis le menu des applications
-  xorway uninstall            # désinstallation (la configuration est gardée)
+  ./xorway install            # ~/.local/bin, launcher, autostart
+  xorway                      # or from the application menu
+  xorway uninstall            # uninstall (the configuration is kept)
   ```
 
-  `xorway install --no-autostart` n'active pas le démarrage automatique.
-- **paquets** : `.rpm` (Fedora…), `.deb` (Debian, Ubuntu…), `.pkg.tar.zst`
-  (Arch). Ils installent `/usr/bin/xorway`, le lanceur et
-  `/etc/xdg/autostart/xorway.desktop` (pour tous les utilisateurs).
+  `xorway install --no-autostart` skips the autostart entry.
+- **packages**: `.rpm` (Fedora…), `.deb` (Debian, Ubuntu…), `.pkg.tar.zst`
+  (Arch). They install `/usr/bin/xorway`, the launcher and
+  `/etc/xdg/autostart/xorway.desktop` (for all users).
 
-### Depuis les sources
+### From source
 
 ```sh
-make build      # produit bin/xorway
+make build      # builds bin/xorway
+make test       # runs the tests
 make install    # ~/.local/bin/xorway + ~/.config/autostart/xorway.desktop
 make uninstall
 ```
 
-`make install` copie aussi le fichier .desktop dans
-`~/.local/share/applications/` : il sert à rattacher les notifications à
-XorWay (réglables dans les paramètres de notification de Plasma).
-`PREFIX` (défaut `~/.local`) et `DESTDIR` sont personnalisables.
+`make install` also copies the .desktop file to
+`~/.local/share/applications/`: Plasma uses it to attach notifications to
+XorWay (configurable in Plasma's notification settings).
+`PREFIX` (default `~/.local`) and `DESTDIR` can be overridden.
 
-## Utilisation
+## Usage
 
 ```sh
-xorway [--backend auto|kwin|x11] [--interval 3s] [--debug]
+xorway [--backend auto|kwin|x11] [--interval 3s] [--lang en|fr] [--debug]
 xorway install [--no-autostart] | uninstall | version
 ```
 
-En mode `auto`, le backend est choisi selon `XDG_CURRENT_DESKTOP` :
-`KDE` → `kwin`, sinon `x11`. Une seule instance peut tourner à la fois.
+In `auto` mode, the backend is chosen from `XDG_CURRENT_DESKTOP`:
+`KDE` → `kwin`, otherwise `x11`. Only one instance can run at a time.
+
+## Languages
+
+The interface (menu, tooltips, notifications, errors, command-line help) is
+translated. The language is chosen in this order:
+
+1. the `--lang` option;
+2. `"language"` in `~/.config/xorway/config.json` (e.g. `"fr"`);
+3. the `LANGUAGE`, `LC_ALL`, `LC_MESSAGES` then `LANG` environment variables
+   (set by Plasma from the system language);
+4. English.
+
+Logs (`--debug`) are always in English.
+
+### Adding a language
+
+Translations live in `internal/i18n/locales/<lang>.json` and use the
+[go-i18n v2](https://github.com/nicksnyder/go-i18n) JSON format, supported by
+translation platforms such as Weblate.
+
+1. Copy `internal/i18n/locales/en.json` to `<lang>.json` (e.g. `de.json`).
+2. Translate the values; keep the keys and the `{{.Placeholders}}` unchanged.
+3. Messages with plural forms are objects (`"one"`, `"other"`, and `"few"`,
+   `"many"`… depending on the language, following the
+   [CLDR plural rules](https://www.unicode.org/cldr/charts/latest/supplemental/language_plural_rules.html)).
+4. Add `Name[<lang>]`, `GenericName[<lang>]` and `Comment[<lang>]` to
+   `internal/install/xorway.desktop`.
+5. Run `make test`: it checks that no key is missing and that placeholders
+   match English.
+
+The new file is embedded in the binary at build time; nothing else to change.
 
 ## Backends
 
-| Backend | Bureau | Fenêtres natives | Fenêtres XWayland |
-|---------|--------|------------------|-------------------|
-| `kwin`  | KDE Plasma 6 | script KWin | script KWin |
-| `x11`   | tous   | non visibles     | `_NET_CLIENT_LIST` de Xwayland |
+| Backend | Desktop | Native windows | XWayland windows |
+|---------|---------|----------------|------------------|
+| `kwin`  | KDE Plasma 6 | KWin script | KWin script |
+| `x11`   | any     | not visible    | Xwayland `_NET_CLIENT_LIST` |
 
 ### KDE Plasma 6 (`kwin`)
 
-Le daemon réserve le nom `org.xorway.Daemon` sur le bus de session, écrit le
-script embarqué dans `$XDG_RUNTIME_DIR/xorway/xorway.js` et le charge via
-`org.kde.KWin /Scripting`. Le script s'abonne à `workspace.windowAdded`,
-`windowRemoved` et aux changements de titre, puis envoie la liste des fenêtres
-au daemon avec `callDBus` (méthode `Update`, JSON). Seuls les appels venant de
-KWin sont acceptés. Le script est déchargé à l'arrêt du daemon.
+The daemon claims the `org.xorway.Daemon` name on the session bus, writes the
+embedded script to `$XDG_RUNTIME_DIR/xorway/xorway.js` and loads it through
+`org.kde.KWin /Scripting`. The script subscribes to `workspace.windowAdded`,
+`windowRemoved` and title changes, then sends the window list to the daemon
+with `callDBus` (`Update` method, JSON). Only calls coming from KWin are
+accepted. The script is unloaded when the daemon stops.
 
-L'API de scripting KWin 6 ne documente **aucune propriété** distinguant X11 de
-Wayland. En revanche, la conversion en chaîne d'un objet fenêtre donne sa
-classe C++ : `KWin::X11Window` pour un client XWayland,
-`KWin::XdgToplevelWindow` pour un client Wayland natif. XorWay s'appuie sur ce
-comportement (vérifié sur KWin 6.7). Si une classe inconnue apparaît, le daemon
-bascule sur un croisement avec `_NET_CLIENT_LIST` de Xwayland (même PID, ou
-même classe et même titre) et l'indique dans le menu.
+The KWin 6 scripting API documents **no property** telling X11 from Wayland.
+However, converting a window object to a string yields its C++ class:
+`KWin::X11Window` for an XWayland client, `KWin::XdgToplevelWindow` for a
+native Wayland client. XorWay relies on this behavior (checked on KWin 6.7).
+If an unknown class shows up, the daemon falls back to a cross-check with
+Xwayland's `_NET_CLIENT_LIST` (same PID, or same class and same title) and
+says so in the menu.
 
-### Repli X11 (`x11`)
+### X11 fallback (`x11`)
 
-Le backend `x11` se connecte au `DISPLAY` de Xwayland : toute fenêtre listée
-dans `_NET_CLIENT_LIST` est une fenêtre XWayland. Les fenêtres techniques
-marquées `_NET_WM_STATE_SKIP_TASKBAR` (ex. *xwaylandvideobridge*) sont ignorées.
-Le rafraîchissement se fait par événements (`PropertyNotify`), avec un polling
-de secours toutes les 3 s.
+The `x11` backend connects to the Xwayland `DISPLAY`: every window listed in
+`_NET_CLIENT_LIST` is an XWayland window. Technical windows marked
+`_NET_WM_STATE_SKIP_TASKBAR` (e.g. *xwaylandvideobridge*) are ignored.
+Updates are event-driven (`PropertyNotify`), with a 3 s fallback poll.
 
-## Icônes d'applications
+## Application icons
 
-L'icône est cherchée dans le fichier .desktop de l'application (par app id,
-`StartupWMClass` ou suffixe de l'id), puis dans le thème d'icônes courant
-(`kdeglobals`, défaut `breeze`), ses parents et `hicolor`, et enfin dans
-`/usr/share/pixmaps`. Les jeux Steam (`steam_app_<id>`) utilisent
-`steam_icon_<id>`. Les SVG sont rendus en pur Go (oksvg) ; à défaut, l'icône
-générique du thème est utilisée. `XORWAY_ICON_THEME` force un thème.
+The icon is looked up in the application's .desktop file (by app id,
+`StartupWMClass` or id suffix), then in the current icon theme
+(`kdeglobals`, default `breeze`), its parents and `hicolor`, and finally in
+`/usr/share/pixmaps`. Steam games (`steam_app_<id>`) use `steam_icon_<id>`.
+SVG files are rendered in pure Go (oksvg); otherwise the theme's generic icon
+is used. `XORWAY_ICON_THEME` forces a theme.
 
-## Détection des jeux
+## Game detection
 
-Une fenêtre est considérée comme un jeu si :
+A window is considered a game when:
 
-| Indice | Source affichée | Piste proposée |
-|--------|-----------------|----------------|
-| classe `steam_app_<id>`, ou `SteamAppId`/`SteamGameId` dans `/proc/<pid>/environ`, avec Wine/Proton | Steam (Proton) | `PROTON_ENABLE_WAYLAND=1 %command%` (Proton ≥ 10) |
-| idem sans Wine | Steam | `SDL_VIDEODRIVER=wayland` |
-| exécutable `wine*` / `*-preloader`, ou commande en `.exe` | Wine | pilote `winewayland` (Wine ≥ 9) |
-| catégorie `Game` dans le fichier .desktop | catégorie Game | `SDL_VIDEODRIVER=wayland` |
+| Clue | Displayed source | Suggestion |
+|------|------------------|------------|
+| class `steam_app_<id>`, or `SteamAppId`/`SteamGameId` in `/proc/<pid>/environ`, with Wine/Proton | Steam (Proton) | `PROTON_ENABLE_WAYLAND=1 %command%` (Proton ≥ 10) |
+| same without Wine | Steam | `SDL_VIDEODRIVER=wayland` |
+| `wine*` / `*-preloader` executable, or a command ending in `.exe` | Wine | `winewayland` driver (Wine ≥ 9) |
+| `Game` category in the .desktop file | Game category | `SDL_VIDEODRIVER=wayland` |
 
-Une seule notification est envoyée par jeu (par PID) tant qu'il reste ouvert.
-Les jeux déjà ouverts au démarrage du daemon sont signalés une fois.
+Only one notification is sent per game (per PID) while it stays open. Games
+already running when the daemon starts are reported once.
 
-## Tester
+## Testing
 
 ```sh
-make run                      # lance le daemon avec --debug
-xeyes &                       # fenêtre XWayland : l'icône passe à l'orange
-GDK_BACKEND=x11 gnome-text-editor &   # application GTK forcée en X11
-QT_QPA_PLATFORM=xcb kwrite &          # application Qt forcée en X11
+make run                              # runs the daemon with --debug
+xeyes &                               # XWayland window: the icon turns orange
+GDK_BACKEND=x11 gnome-text-editor &   # GTK application forced to X11
+QT_QPA_PLATFORM=xcb kwrite &          # Qt application forced to X11
+LANG=fr_FR.UTF-8 ./bin/xorway         # French interface
 ```
 
-Simuler un jeu Steam (notification + 🎮 dans le menu) :
+Simulate a Steam game (notification + 🎮 in the menu):
 
 ```sh
 SteamAppId=4242 xeyes &
 ```
 
-Vérifier le backend KDE :
+Check the KDE backend:
 
 ```sh
 busctl --user call org.kde.KWin /Scripting org.kde.kwin.Scripting isScriptLoaded s xorway
-# → b true pendant que xorway tourne, b false après l'avoir quitté
+# → b true while xorway runs, b false after quitting it
 ```
 
-## Publier une version
+## Releasing
 
-Les Releases sont produites par GoReleaser (`.goreleaser.yaml`) via GitHub
-Actions (`.github/workflows/release.yml`) : il suffit de pousser un tag.
+Releases are built by GoReleaser (`.goreleaser.yaml`) through GitHub Actions
+(`.github/workflows/release.yml`): pushing a tag is enough.
 
 ```sh
-git tag -s v0.1.0 -m "XorWay 0.1.0"   # tag signé
+git tag -s v0.1.0 -m "XorWay 0.1.0"   # signed tag
 git push origin v0.1.0
 ```
 
-Le workflow vérifie le code (`gofmt`, `go vet`), compile pour amd64 et arm64
-(sans CGO, version injectée via `-X main.version`), puis publie les archives,
-les paquets et `checksums.txt`. Test local sans publication :
-`goreleaser release --snapshot --clean` (résultat dans `dist/`).
+The workflow checks the code (`gofmt`, `go vet`, `go test`), builds for amd64
+and arm64 (no CGO, version injected with `-X main.version`), then publishes
+the archives, the packages and `checksums.txt`. Local dry run:
+`goreleaser release --snapshot --clean` (output in `dist/`).
 
 ## Limitations
 
-- Le backend `x11` ne voit pas les fenêtres Wayland natives.
-- Backend `kwin` : la classification repose sur le nom de classe C++ des
-  fenêtres, un détail interne de KWin qui pourrait changer (repli automatique
-  sur le croisement X11, moins fiable).
-- Les fenêtres absentes de la barre des tâches (`skipTaskbar`) sont ignorées.
-- Détection de jeux heuristique : une application Windows quelconque sous
-  Wine est traitée comme un jeu ; un jeu natif hors Steam sans catégorie
-  `Game` n'est pas reconnu.
-- Certains SVG ne sont pas pris en charge par oksvg (ex. Dolphin) : l'icône
-  générique est affichée.
-- Un titre qui change en continu (ex. terminal avec animation) met à jour
-  l'entrée correspondante à chaque changement ; le menu n'est reconstruit que
-  quand des fenêtres apparaissent ou disparaissent.
+- The `x11` backend cannot see native Wayland windows.
+- `kwin` backend: classification relies on the C++ class name of windows, an
+  internal KWin detail that could change (automatic, less reliable fallback to
+  the X11 cross-check).
+- Windows hidden from the taskbar (`skipTaskbar`) are ignored.
+- Heuristic game detection: any Windows application under Wine is treated as
+  a game; a native game outside Steam without the `Game` category is not
+  recognized.
+- Some SVG files are not supported by oksvg (e.g. Dolphin): the generic icon
+  is shown.
+- A title that keeps changing (e.g. an animated terminal) updates its entry
+  on every change; the menu is only rebuilt when windows appear or disappear.
 
-## Divulgation IA
+## AI disclosure
 
-Ce projet a été développé avec l'assistance d'une IA : **Claude Opus 5.5**
-(Anthropic), via Claude Code. L'IA a rédigé la majeure partie du code, du
-script KWin, du Makefile et de cette documentation, à partir des
-spécifications et sous la direction de l'auteur, qui a validé le plan, testé
-chaque étape sur sa machine et décidé des évolutions. Les commits concernés
-portent la mention `Co-Authored-By: Claude`. Les fichiers `AGENTS.md` et
-`CLAUDE.md` décrivent le projet pour les agents de code.
+This project was developed with the help of an AI: **Claude Opus 5.5**
+(Anthropic), through Claude Code. The AI wrote most of the code, the KWin
+script, the Makefile and this documentation, from the author's specifications
+and under their direction; the author approved the plan, tested every step on
+their machine and decided how the project evolves. The related commits carry a
+`Co-Authored-By: Claude` trailer. `AGENTS.md` and `CLAUDE.md` describe the
+project for coding agents.
 
-## Licence
+## License
 
-XorWay est un logiciel libre : vous pouvez le redistribuer et/ou le modifier
-selon les termes de la **GNU Affero General Public License** telle que publiée
-par la Free Software Foundation, version 3 de la licence, ou (à votre choix)
-toute version ultérieure (`AGPL-3.0-or-later`). Voir le fichier
-[`LICENSE`](LICENSE).
+XorWay is free software: you can redistribute it and/or modify it under the
+terms of the **GNU Affero General Public License** as published by the Free
+Software Foundation, either version 3 of the License, or (at your option) any
+later version (`AGPL-3.0-or-later`). See [`LICENSE`](LICENSE).

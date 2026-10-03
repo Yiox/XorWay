@@ -1,4 +1,4 @@
-# Publie une Release GitHub (binaires + paquets) à chaque tag vX.Y.Z.
+# Publishes a GitHub Release (binaries + packages) for every vX.Y.Z tag.
 name: Release
 
 on:
@@ -14,16 +14,17 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          fetch-depth: 0 # GoReleaser a besoin des tags pour le changelog
+          fetch-depth: 0 # GoReleaser needs the tags for the changelog
 
       - uses: actions/setup-go@v7
         with:
           go-version: stable
 
-      - name: Vérifications
+      - name: Checks
         run: |
           test -z "$(gofmt -l .)"
           go vet ./...
+          go test ./...
 
       - uses: goreleaser/goreleaser-action@v7
         with:

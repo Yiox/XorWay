@@ -1,12 +1,12 @@
-# Publication des versions : un tag vX.Y.Z poussé sur GitHub déclenche
-# .github/workflows/release.yml, qui exécute GoReleaser avec ce fichier.
-# Test local : goreleaser release --snapshot --clean
+# Releases: pushing a vX.Y.Z tag to GitHub triggers
+# .github/workflows/release.yml, which runs GoReleaser with this file.
+# Local test: goreleaser release --snapshot --clean
 version: 2
 project_name: xorway
 
 before:
   hooks:
-    # Fichier .desktop pour les paquets système (binaire dans /usr/bin).
+    # .desktop file for system packages (binary in /usr/bin).
     - sh -c "mkdir -p build && sed 's|@BINDIR@|/usr/bin|' internal/install/xorway.desktop > build/xorway.desktop"
 
 builds:
@@ -35,8 +35,8 @@ nfpms:
     maintainer: "Yiox <36563878+Yiox@users.noreply.github.com>"
     homepage: https://github.com/Yiox/XorWay
     description: |-
-      Icône systray indiquant quelles fenêtres tournent sous XWayland
-      et lesquelles sont en Wayland natif (KDE Plasma 6).
+      System tray icon showing which windows run under XWayland
+      and which ones are native Wayland clients (KDE Plasma 6).
     license: AGPL-3.0-or-later
     formats: [deb, rpm, archlinux]
     bindir: /usr/bin

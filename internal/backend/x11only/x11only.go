@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Package x11only est le backend de repli : il ne voit que les fenêtres
-// XWayland, via _NET_CLIENT_LIST du serveur Xwayland.
+// Package x11only is the fallback backend: it only sees XWayland windows,
+// through _NET_CLIENT_LIST of the Xwayland server.
 package x11only
 
 import (
@@ -10,20 +10,21 @@ import (
 	"strconv"
 
 	"xorway/internal/backend"
+	"xorway/internal/i18n"
 	"xorway/internal/x11"
 )
 
-// Backend implémente backend.Backend à partir du seul serveur X.
+// Backend implements backend.Backend using the X server only.
 type Backend struct {
 	mon *x11.Monitor
 }
 
-// New crée le backend pour le DISPLAY donné.
+// New creates the backend for the given DISPLAY.
 func New(display string) *Backend {
 	return &Backend{mon: x11.NewMonitor(display)}
 }
 
-func (b *Backend) Name() string { return "X11 (repli)" }
+func (b *Backend) Name() string { return i18n.T("backend.x11") }
 
 func (b *Backend) Start(ctx context.Context) error {
 	go b.mon.Run(ctx)
@@ -42,9 +43,7 @@ func (b *Backend) Snapshot() (backend.Snapshot, error) {
 	if err != nil {
 		return backend.Snapshot{}, err
 	}
-	snap := backend.Snapshot{
-		Notice: "Backend de repli : seules les fenêtres XWayland sont visibles",
-	}
+	snap := backend.Snapshot{Notice: i18n.T("notice.x11_only")}
 	for _, c := range clients {
 		if c.SkipTaskbar {
 			continue
@@ -54,7 +53,7 @@ func (b *Backend) Snapshot() (backend.Snapshot, error) {
 	return snap, nil
 }
 
-// FromClient convertit un client X11 en backend.Window de type XWayland.
+// FromClient converts an X11 client into an XWayland backend.Window.
 func FromClient(c x11.Client) backend.Window {
 	app := c.Class
 	if app == "" {

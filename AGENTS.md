@@ -1,64 +1,83 @@
 # AGENTS.md — XorWay
 
-Daemon Go : icône systray (StatusNotifierItem) listant les fenêtres Wayland
-natives / XWayland, notifie quand un jeu tourne sous XWayland.
-Cibles : KDE Plasma 6 (fait), GNOME (voir `TODO.md`). Lire ce fichier avant
-d'ouvrir le code ; n'ouvrir que les fichiers concernés.
+Go daemon: system tray icon (StatusNotifierItem) listing native Wayland /
+XWayland windows, notifies when a game runs under XWayland.
+Targets: KDE Plasma 6 (done), GNOME (see `TODO.md`). Read this file before
+opening the code; only open the files you need.
 
-## Carte
+## Map
 
-| Chemin | Rôle |
-|--------|------|
-| `cmd/xorway/main.go` | flags, choix du backend (`XDG_CURRENT_DESKTOP`), type `app` : boucle `update()` (événements + debounce 200 ms + polling 3 s) → détection jeux → `alert` → `tray` |
-| `internal/backend/backend.go` | interface `Backend` (`Start/Snapshot/Changes/Close`), `Window`, `Snapshot`, `ErrPending`, `ErrAlreadyRunning` |
-| `internal/backend/kwin/` | charge `script/xorway.js` (embarqué) via `org.kde.KWin /Scripting` ; le script appelle `org.xorway.Daemon.Update(json)` ; repli croisement X11 |
-| `internal/backend/x11only/` | backend de repli : XWayland seulement |
-| `internal/x11/` | xgb : `_NET_CLIENT_LIST`, titres, `WM_CLASS`, PID, `SKIP_TASKBAR` ; `Monitor` avec reconnexion |
-| `internal/tray/` | menu dbusmenu (fyne.io/systray), icônes d'état dessinées en Go (`icon.go`) |
-| `internal/desktop/` | index des fichiers .desktop (Icon, Categories, StartupWMClass) |
-| `internal/appicon/` | spec Icon Theme (`theme.go`) + rendu PNG/SVG (`appicon.go`) |
-| `internal/game/` | heuristiques jeu : `steam_app_*`, `SteamAppId` (/proc environ), Wine, catégorie Game |
-| `internal/alert/`, `internal/notify/` | dédoublonnage par PID + `org.freedesktop.Notifications` |
-| `internal/config/` | `~/.config/xorway/config.json` (`notifyGames`) |
-| `internal/install/` | sous-commandes `install`/`uninstall` (copie dans ~/.local/bin, .desktop embarqué `xorway.desktop`, `@BINDIR@` remplacé) |
-| `.goreleaser.yaml`, `.github/workflows/release.yml` | Release sur tag `v*` : tar.gz, deb, rpm, archlinux (amd64/arm64) |
+| Path | Role |
+|------|------|
+| `cmd/xorway/main.go` | language setup, flags, subcommands, backend choice (`XDG_CURRENT_DESKTOP`), `app` type: `update()` loop (events + 200 ms debounce + 3 s polling) → game detection → `alert` → `tray` |
+| `internal/backend/backend.go` | `Backend` interface (`Start/Snapshot/Changes/Close`), `Window`, `Snapshot`, `ErrPending`, `ErrAlreadyRunning` |
+| `internal/backend/kwin/` | loads `script/xorway.js` (embedded) through `org.kde.KWin /Scripting`; the script calls `org.xorway.Daemon.Update(json)`; X11 cross-check fallback |
+| `internal/backend/x11only/` | fallback backend: XWayland windows only |
+| `internal/x11/` | xgb: `_NET_CLIENT_LIST`, titles, `WM_CLASS`, PID, `SKIP_TASKBAR`; `Monitor` with reconnection |
+| `internal/tray/` | dbusmenu menu (fyne.io/systray), state icons drawn in Go (`icon.go`) |
+| `internal/i18n/` | translations: `T`/`N`/`NewError`/`Wrap`, catalogs `locales/<lang>.json` (go-i18n v2 format), language detection |
+| `internal/desktop/` | .desktop file index (Icon, Categories, StartupWMClass, localized Name) |
+| `internal/appicon/` | Icon Theme spec (`theme.go`) + PNG/SVG rendering (`appicon.go`) |
+| `internal/game/` | game heuristics: `steam_app_*`, `SteamAppId` (/proc environ), Wine, Game category |
+| `internal/alert/`, `internal/notify/` | per-PID deduplication + `org.freedesktop.Notifications` |
+| `internal/config/` | `~/.config/xorway/config.json` (`notifyGames`, `language`) |
+| `internal/install/` | `install`/`uninstall` subcommands (copy to ~/.local/bin, embedded `xorway.desktop`, `@BINDIR@` replaced) |
+| `.goreleaser.yaml`, `.github/workflows/release.yml` | Release on `v*` tag: tar.gz, deb, rpm, archlinux (amd64/arm64) |
 
-## Invariants / pièges
+## Invariants / pitfalls
 
-- **Pas de CGO** (`CGO_ENABLED=0`). **Go minimum 1.22** : ne pas monter une
-  dépendance qui exige plus (`golang.org/x/image` épinglé en v0.24.0). Vérifier
-  avec `GOTOOLCHAIN=go1.22.12 go build ./...`.
-- KWin 6 n'expose aucune propriété X11/Wayland : on lit la classe C++ via
-  `String(window)` → `KWin::X11Window` = XWayland. Classe inconnue → croisement X11.
-- `Update` D-Bus n'accepte que l'expéditeur propriétaire de `org.kde.KWin`.
-- dbusmenu : `_` = mnémonique → `escape()` dans `tray.go`.
-- `systray.ResetMenu()` ferme les `ClickedCh` : les goroutines `listen` s'arrêtent seules.
-- `tray.setMenu` met à jour sur place si la « forme » du menu est inchangée,
-  sinon reconstruit. `Tray.Update` : une seule goroutine (la boucle).
-- `backend.Window.Game` est rempli par `main`, jamais par les backends.
-- Sous GNOME, ne pas se connecter à Xwayland (démarrage à la demande).
-- `xorway.desktop` (template `@BINDIR@`) est la source unique : utilisé par
-  `install`, le Makefile et le hook `before` de GoReleaser (`build/`).
-- `main.version` est injectée au build (Makefile : `git describe`).
+- **No CGO** (`CGO_ENABLED=0`). **Go 1.22 minimum**: do not bump a
+  dependency that requires more (`golang.org/x/image` pinned to v0.24.0,
+  `golang.org/x/text` v0.22.0; go-i18n itself needs Go 1.24, hence our own
+  loader). Check with `GOTOOLCHAIN=go1.22.12 go build ./...`.
+- KWin 6 exposes no X11/Wayland property: we read the C++ class through
+  `String(window)` → `KWin::X11Window` = XWayland. Unknown class → X11 cross-check.
+- D-Bus `Update` only accepts the sender owning `org.kde.KWin`.
+- dbusmenu: `_` is a mnemonic marker → `escape()` in `tray.go`.
+- `systray.ResetMenu()` closes the `ClickedCh` channels: `listen` goroutines end by themselves.
+- `tray.setMenu` updates in place when the menu "shape" is unchanged,
+  otherwise rebuilds. `Tray.Update`: a single goroutine (the loop).
+- `backend.Window.Game` is filled in by `main`, never by backends.
+- Under GNOME, do not connect to Xwayland (on-demand startup).
+- `xorway.desktop` (`@BINDIR@` template) is the single source: used by
+  `install`, the Makefile and the GoReleaser `before` hook (`build/`).
+- `main.version` is injected at build time (Makefile: `git describe`).
+
+## Translations (i18n)
+
+- **Every user-facing string** (menu, tooltips, notifications, errors shown in
+  the menu or the CLI, CLI help, `install` output) goes through `i18n.T`,
+  `i18n.N` (plurals, `{{.Count}}`) or `i18n.NewError`/`i18n.Wrap` (translatable
+  errors, wrapped error available as `{{.Err}}`). Placeholders are key/value
+  pairs: `i18n.T("menu.backend", "Name", name)`.
+- New message: add the key to `locales/en.json` **and** `locales/fr.json`.
+  `go test ./internal/i18n` fails on a missing key, a key used in code but
+  absent from `en.json`, or placeholders that differ between languages.
+- Sentinel errors are `i18n.NewError(id)`; `errors.Is` matches on the ID.
+- The language is set once at startup (`--lang` > config `language` >
+  `LANGUAGE`/`LC_ALL`/`LC_MESSAGES`/`LANG` > English).
+- Logs (`slog`) are **not** translated and stay in English.
 
 ## Conventions
 
-- Commentaires, messages d'erreur, UI, README, commits : **français** (accents corrects).
-- En-tête `// SPDX-License-Identifier: AGPL-3.0-or-later` sur tout nouveau fichier source.
-- Erreurs utilisateur lisibles : leur message est affiché tel quel dans le menu.
-- `gofmt` + `go vet ./...` avant commit.
+- Code, comments, logs, README, AGENTS.md: **English**. Reference UI
+  language: English; French is provided through `locales/fr.json`.
+- Commit messages: French.
+- Header `// SPDX-License-Identifier: AGPL-3.0-or-later` on every new source file.
+- `gofmt`, `go vet ./...` and `go test ./...` before committing.
 
-## Tester (session Plasma Wayland)
+## Testing (Plasma Wayland session)
 
 ```sh
 make build && ./bin/xorway --debug
-xeyes &                  # fenêtre XWayland
-SteamAppId=4242 xeyes &  # faux jeu Steam → notification
-# lire le menu sans l'ouvrir :
+LANG=fr_FR.UTF-8 ./bin/xorway   # French interface
+xeyes &                  # XWayland window
+SteamAppId=4242 xeyes &  # fake Steam game → notification
+# read the menu without opening it:
 N=$(busctl --user list --no-legend | awk -v p="$(pgrep -x xorway)" '$2==p && $1 ~ /^:/ {print $1; exit}')
 busctl --user call "$N" /StatusNotifierItem/menu com.canonical.dbusmenu GetLayout iias -- 0 -1 0
 busctl --user call org.kde.KWin /Scripting org.kde.kwin.Scripting isScriptLoaded s xorway
 ```
 
-Arrêter avec `pkill -x xorway` (jamais `pkill -f xorway` : tue aussi le shell
-appelant).
+Stop with `pkill -x xorway` (never `pkill -f xorway`: it also kills the
+calling shell).

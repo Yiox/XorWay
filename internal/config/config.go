@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Package config persiste les préférences de l'utilisateur dans
+// Package config persists user preferences in
 // $XDG_CONFIG_HOME/xorway/config.json.
 package config
 
@@ -12,12 +12,15 @@ import (
 	"path/filepath"
 )
 
-// Config regroupe les préférences modifiables depuis le menu.
+// Config holds the user preferences.
 type Config struct {
 	NotifyGames bool `json:"notifyGames"`
+	// Language is a language code ("en", "fr"…); empty means automatic
+	// detection from the environment.
+	Language string `json:"language,omitempty"`
 }
 
-// Default est la configuration initiale.
+// Default is the initial configuration.
 var Default = Config{NotifyGames: true}
 
 func path() (string, error) {
@@ -28,7 +31,7 @@ func path() (string, error) {
 	return filepath.Join(dir, "xorway", "config.json"), nil
 }
 
-// Load lit la configuration ; un fichier absent donne Default.
+// Load reads the configuration; a missing file yields Default.
 func Load() (Config, error) {
 	c := Default
 	p, err := path()
@@ -46,7 +49,7 @@ func Load() (Config, error) {
 	return c, err
 }
 
-// Save écrit la configuration.
+// Save writes the configuration.
 func Save(c Config) error {
 	p, err := path()
 	if err != nil {

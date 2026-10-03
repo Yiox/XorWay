@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Package install installe le binaire courant pour l'utilisateur, sans
-// droits root : ~/.local/bin, lanceur d'application et démarrage automatique.
+// Package install installs the running binary for the current user, without
+// root: ~/.local/bin, application launcher and autostart.
 package install
 
 import (
@@ -13,17 +13,19 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"xorway/internal/i18n"
 )
 
 //go:embed xorway.desktop
 var desktopTemplate string
 
-// Desktop renvoie le fichier .desktop pour un binaire installé dans binDir.
+// Desktop returns the .desktop file for a binary installed in binDir.
 func Desktop(binDir string) string {
 	return strings.ReplaceAll(desktopTemplate, "@BINDIR@", binDir)
 }
 
-// paths regroupe les emplacements d'installation de l'utilisateur.
+// paths holds the user's installation locations.
 type paths struct {
 	bin, app, autostart string
 }
@@ -48,8 +50,8 @@ func userPaths() (paths, error) {
 	}, nil
 }
 
-// Install copie l'exécutable courant dans ~/.local/bin et crée les fichiers
-// .desktop. Elle écrit sur w ce qu'elle fait.
+// Install copies the running executable to ~/.local/bin and creates the
+// .desktop files. It reports what it does on w.
 func Install(w io.Writer, autostart bool) error {
 	p, err := userPaths()
 	if err != nil {
@@ -57,7 +59,7 @@ func Install(w io.Writer, autostart bool) error {
 	}
 	self, err := os.Executable()
 	if err != nil {
-		return fmt.Errorf("emplacement de l'exécutable : %w", err)
+		return i18n.Wrap(err, "error.install_self")
 	}
 	if self, err = filepath.EvalSymlinks(self); err != nil {
 		return err
@@ -65,30 +67,30 @@ func Install(w io.Writer, autostart bool) error {
 
 	if self != p.bin {
 		if err := copyFile(self, p.bin, 0o755); err != nil {
-			return fmt.Errorf("copie du binaire : %w", err)
+			return i18n.Wrap(err, "error.install_copy")
 		}
 	}
-	fmt.Fprintln(w, "binaire     :", p.bin)
+	fmt.Fprintln(w, i18n.T("install.binary", "Path", p.bin))
 
 	desktop := Desktop(filepath.Dir(p.bin))
 	if err := writeFile(p.app, desktop); err != nil {
 		return err
 	}
-	fmt.Fprintln(w, "lanceur     :", p.app)
+	fmt.Fprintln(w, i18n.T("install.launcher", "Path", p.app))
 
 	if autostart {
 		if err := writeFile(p.autostart, desktop); err != nil {
 			return err
 		}
-		fmt.Fprintln(w, "autostart   :", p.autostart)
+		fmt.Fprintln(w, i18n.T("install.autostart", "Path", p.autostart))
 	} else if err := remove(p.autostart); err != nil {
 		return err
 	}
 	return nil
 }
 
-// Uninstall supprime les fichiers créés par Install. La configuration
-// (~/.config/xorway) est conservée.
+// Uninstall removes the files created by Install. The configuration
+// (~/.config/xorway) is kept.
 func Uninstall(w io.Writer) error {
 	p, err := userPaths()
 	if err != nil {
@@ -98,7 +100,7 @@ func Uninstall(w io.Writer) error {
 		if err := remove(f); err != nil {
 			return err
 		}
-		fmt.Fprintln(w, "supprimé    :", f)
+		fmt.Fprintln(w, i18n.T("install.removed", "Path", f))
 	}
 	return nil
 }
@@ -117,8 +119,8 @@ func remove(path string) error {
 	return nil
 }
 
-// copyFile copie via un fichier temporaire puis un renommage, ce qui
-// fonctionne même si une ancienne version du binaire est en cours d'exécution.
+// copyFile copies through a temporary file and a rename, which works even
+// while an older version of the binary is running.
 func copyFile(src, dst string, mode os.FileMode) error {
 	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
 		return err
@@ -132,7 +134,7 @@ func copyFile(src, dst string, mode os.FileMode) error {
 	if err != nil {
 		return err
 	}
-	defer os.Remove(tmp.Name()) // sans effet après le renommage
+	defer os.Remove(tmp.Name()) // no-op after the rename
 	if _, err := io.Copy(tmp, in); err != nil {
 		tmp.Close()
 		return err

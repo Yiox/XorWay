@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Package alert notifie l'utilisateur quand un jeu s'ouvre sous XWayland.
+// Package alert notifies the user when a game opens under XWayland.
 package alert
 
 import (
-	"fmt"
 	"log/slog"
 	"strconv"
 	"sync/atomic"
@@ -13,22 +12,23 @@ import (
 	"xorway/internal/backend"
 	"xorway/internal/desktop"
 	"xorway/internal/game"
+	"xorway/internal/i18n"
 	"xorway/internal/notify"
 )
 
-const imageSize = 64 // taille de l'icône du jeu dans la notification
+const imageSize = 64 // size of the game icon in the notification
 
-// Alerter envoie une notification par jeu (et non par fenêtre) tant que
-// celui-ci reste ouvert.
+// Alerter sends one notification per game (not per window) for as long as
+// the game stays open.
 type Alerter struct {
 	client  *notify.Client
 	icons   *appicon.Resolver
 	idx     *desktop.Index
 	enabled atomic.Bool
-	seen    map[string]bool // jeux déjà signalés et toujours ouverts
+	seen    map[string]bool // games already reported and still open
 }
 
-// New crée un alerteur. client peut être nil (notifications indisponibles).
+// New creates an alerter. client may be nil (notifications unavailable).
 func New(client *notify.Client, icons *appicon.Resolver, idx *desktop.Index, enabled bool) *Alerter {
 	a := &Alerter{client: client, icons: icons, idx: idx, seen: map[string]bool{}}
 	a.enabled.Store(enabled)
@@ -38,7 +38,7 @@ func New(client *notify.Client, icons *appicon.Resolver, idx *desktop.Index, ena
 func (a *Alerter) Enabled() bool     { return a.enabled.Load() }
 func (a *Alerter) SetEnabled(v bool) { a.enabled.Store(v) }
 
-// key identifie un jeu : son PID, à défaut l'identifiant de la fenêtre.
+// key identifies a game: its PID, or the window ID when unknown.
 func key(w backend.Window) string {
 	if w.PID > 0 {
 		return "pid:" + strconv.Itoa(w.PID)
@@ -46,8 +46,8 @@ func key(w backend.Window) string {
 	return "win:" + w.ID
 }
 
-// Process doit être appelé à chaque nouvel état. Il n'est pas sûr pour un
-// usage concurrent.
+// Process must be called on every new state. It is not safe for concurrent
+// use.
 func (a *Alerter) Process(snap backend.Snapshot) {
 	present := map[string]bool{}
 	for _, w := range snap.Windows {
@@ -59,7 +59,7 @@ func (a *Alerter) Process(snap backend.Snapshot) {
 			continue
 		}
 		present[k] = true
-		// Un jeu déjà ouvert quand on active l'option n'est pas signalé.
+		// A game already open when the option is enabled is not reported.
 		if !a.seen[k] && a.Enabled() && a.client != nil {
 			a.send(w)
 		}
@@ -70,18 +70,18 @@ func (a *Alerter) Process(snap backend.Snapshot) {
 func (a *Alerter) send(w backend.Window) {
 	name := w.Title
 	if e := a.idx.Lookup(w.AppID); e != nil && e.Name != "" {
-		name = e.Name
+		name = e.LocalName(i18n.Language())
 	}
 	if name == "" {
 		name = w.AppID
 	}
 
-	body := fmt.Sprintf("« %s » (%s) tourne sous XWayland au lieu de Wayland natif.", name, w.Game)
+	body := i18n.T("notify.game.body", "Name", name, "Source", w.Game.String())
 	if h := w.Game.Hint(); h != "" {
 		body += "\n" + h
 	}
 	n := notify.Notification{
-		Summary: "Jeu lancé sous X11",
+		Summary: i18n.T("notify.game.summary"),
 		Body:    body,
 		Icon:    "applications-games",
 		Image:   a.icons.Image(w.AppID, imageSize),
@@ -90,5 +90,5 @@ func (a *Alerter) send(w backend.Window) {
 		slog.Warn("notification", "err", err)
 		return
 	}
-	slog.Info("jeu sous XWayland signalé", "app", w.AppID, "pid", w.PID, "source", w.Game)
+	slog.Info("game under XWayland reported", "app", w.AppID, "pid", w.PID, "source", w.Game.Key())
 }

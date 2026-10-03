@@ -10,8 +10,8 @@ import (
 	"math"
 )
 
-// Les icônes sont dessinées à l'exécution pour éviter des fichiers binaires
-// dans le dépôt : un disque coloré portant une lettre en traits blancs.
+// Icons are drawn at runtime to keep binary files out of the repository: a
+// colored disc carrying a letter drawn with white strokes.
 
 const iconSize = 64
 
@@ -20,9 +20,9 @@ type point struct{ x, y float64 }
 type iconState int
 
 const (
-	stateNative   iconState = iota // aucune fenêtre XWayland
-	stateXWayland                  // au moins une fenêtre XWayland
-	stateError                     // backend indisponible
+	stateNative   iconState = iota // no XWayland window
+	stateXWayland                  // at least one XWayland window
+	stateError                     // backend unavailable
 )
 
 var (
@@ -31,7 +31,7 @@ var (
 	colorError    = color.NRGBA{0x80, 0x80, 0x80, 0xff}
 )
 
-// Tracés (polylignes) de chaque glyphe, en coordonnées 64×64.
+// Strokes (polylines) of each glyph, in 64×64 coordinates.
 var glyphs = map[iconState][][]point{
 	stateNative:   {{{16, 22}, {24, 44}, {32, 29}, {40, 44}, {48, 22}}}, // W
 	stateXWayland: {{{21, 21}, {43, 43}}, {{43, 21}, {21, 43}}},         // X
@@ -52,7 +52,7 @@ func renderIcon(bg color.NRGBA, strokes [][]point) []byte {
 	const (
 		radius    = 30.0
 		halfWidth = 3.6
-		samples   = 4 // suréchantillonnage 4×4 pour l'anticrénelage
+		samples   = 4 // 4×4 supersampling for anti-aliasing
 	)
 	img := image.NewNRGBA(image.Rect(0, 0, iconSize, iconSize))
 	c := point{iconSize / 2, iconSize / 2}
@@ -78,7 +78,7 @@ func renderIcon(bg color.NRGBA, strokes [][]point) []byte {
 			if disc == 0 {
 				continue
 			}
-			// Mélange fond/blanc selon la couverture du glyphe.
+			// Blend background/white according to glyph coverage.
 			g := float64(glyph) / float64(disc)
 			mix := func(v uint8) uint8 { return uint8(float64(v)*(1-g) + 255*g) }
 			img.SetNRGBA(px, py, color.NRGBA{
@@ -90,7 +90,7 @@ func renderIcon(bg color.NRGBA, strokes [][]point) []byte {
 
 	var buf bytes.Buffer
 	if err := png.Encode(&buf, img); err != nil {
-		panic(err) // impossible avec un NRGBA en mémoire
+		panic(err) // cannot happen with an in-memory NRGBA
 	}
 	return buf.Bytes()
 }

@@ -10,17 +10,21 @@ import (
 	"time"
 
 	"github.com/jezek/xgb/xproto"
+
+	"xorway/internal/i18n"
 )
 
-// RetryInterval est le délai entre deux tentatives de connexion à Xwayland.
+// RetryInterval is the delay between two connection attempts to Xwayland.
 const RetryInterval = 3 * time.Second
 
-// ErrConnecting est renvoyée par Clients avant la première tentative de
-// connexion.
-var ErrConnecting = errors.New("x11: connexion en cours")
+// ErrConnecting is returned by Clients before the first connection attempt.
+var ErrConnecting = i18n.NewError("status.loading")
 
-// Monitor maintient une connexion à Xwayland (avec reconnexion automatique)
-// et signale les changements de la liste des fenêtres ou de leurs titres.
+// errLost is reported after the connection to Xwayland was lost.
+var errLost = i18n.NewError("error.x11_lost")
+
+// Monitor keeps a connection to Xwayland (reconnecting automatically) and
+// reports changes to the window list or to window titles.
 type Monitor struct {
 	display string
 	changes chan struct{}
@@ -30,7 +34,7 @@ type Monitor struct {
 	err  error
 }
 
-// NewMonitor crée un moniteur pour le DISPLAY donné (ex. ":0").
+// NewMonitor creates a monitor for the given DISPLAY (e.g. ":0").
 func NewMonitor(display string) *Monitor {
 	return &Monitor{
 		display: display,
@@ -39,10 +43,10 @@ func NewMonitor(display string) *Monitor {
 	}
 }
 
-// Changes reçoit une valeur (coalescée) à chaque changement détecté.
+// Changes receives a (coalesced) value on every detected change.
 func (m *Monitor) Changes() <-chan struct{} { return m.changes }
 
-// Clients renvoie les fenêtres X11 actuellement gérées.
+// Clients returns the X11 windows currently managed.
 func (m *Monitor) Clients() ([]Client, error) {
 	m.mu.Lock()
 	c, err := m.conn, m.err
@@ -53,21 +57,21 @@ func (m *Monitor) Clients() ([]Client, error) {
 	return c.clients()
 }
 
-// Run se connecte à Xwayland et écoute les événements jusqu'à l'annulation
-// du contexte. En cas d'échec ou de perte de connexion, il réessaie.
+// Run connects to Xwayland and listens to events until the context is
+// cancelled. It retries after a failure or a lost connection.
 func (m *Monitor) Run(ctx context.Context) {
 	for {
 		c, err := dial(m.display)
 		m.set(c, err)
 		if err != nil {
-			slog.Debug("x11: connexion impossible", "err", err)
+			slog.Debug("x11: cannot connect", "err", err)
 			if errors.Is(err, ErrNoDisplay) {
 				return
 			}
 		} else {
-			slog.Debug("x11: connecté", "display", m.display)
+			slog.Debug("x11: connected", "display", m.display)
 			m.watch(ctx, c)
-			m.set(nil, errors.New("x11: connexion à Xwayland perdue"))
+			m.set(nil, errLost)
 		}
 
 		select {
@@ -92,8 +96,8 @@ func (m *Monitor) notify() {
 	}
 }
 
-// listenClients s'abonne aux changements de propriétés de chaque client,
-// pour être prévenu des changements de titre.
+// listenClients subscribes to property changes of every client, to be
+// notified of title changes.
 func listenClients(c *conn) {
 	ids, err := c.clientIDs()
 	if err != nil {
@@ -104,14 +108,14 @@ func listenClients(c *conn) {
 	}
 }
 
-// watch traite les événements X jusqu'à la fermeture de la connexion.
+// watch handles X events until the connection is closed.
 func (m *Monitor) watch(ctx context.Context, c *conn) {
 	done := make(chan struct{})
 	defer close(done)
 	go func() {
 		select {
 		case <-ctx.Done():
-			c.close() // débloque WaitForEvent
+			c.close() // unblocks WaitForEvent
 		case <-done:
 		}
 	}()
@@ -125,10 +129,10 @@ func (m *Monitor) watch(ctx context.Context, c *conn) {
 	for {
 		ev, xerr := c.x.WaitForEvent()
 		if ev == nil && xerr == nil {
-			return // connexion fermée
+			return // connection closed
 		}
 		if xerr != nil {
-			// Typiquement BadWindow sur une fenêtre détruite : sans gravité.
+			// Typically BadWindow on a destroyed window: harmless.
 			continue
 		}
 		pe, ok := ev.(xproto.PropertyNotifyEvent)
