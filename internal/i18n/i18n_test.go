@@ -214,3 +214,18 @@ func TestSetLanguage(t *testing.T) {
 		t.Errorf("unsupported = %q, want the detected language", got)
 	}
 }
+
+// Every catalog names its language: it is shown in the language submenu.
+func TestName(t *testing.T) {
+	for _, l := range Available() {
+		if _, ok := catalogs[l]["language.name"]; !ok {
+			t.Errorf("%s.json: missing \"language.name\"", l)
+		}
+	}
+	if got := Name("fr"); got != "Français" {
+		t.Errorf("Name(fr) = %q", got)
+	}
+	if got := Name("xx"); got != "xx" {
+		t.Errorf("Name(xx) = %q, want the code", got)
+	}
+}

@@ -9,9 +9,12 @@ which ones are **native Wayland** clients, in a Wayland session.
 
 The menu lists the windows with their application icon; detected games are
 marked with 🎮. When a game opens under XWayland, a notification reports it
-and suggests a way to run it as a native Wayland client (menu option
-“Notify when a game runs under XWayland”, saved in
-`~/.config/xorway/config.json`).
+and suggests a way to run it as a native Wayland client.
+
+The **Settings** submenu turns these notifications on or off and picks the
+interface language; changes apply immediately and are saved in
+`~/.config/xorway/config.json`. The bottom of the menu shows the backend in
+use and the XorWay version (also printed by `xorway version`).
 
 The interface is available in English and French (see
 [Languages](#languages)).
@@ -73,7 +76,8 @@ The interface (menu, tooltips, notifications, errors, command-line help) is
 translated. The language is chosen in this order:
 
 1. the `--lang` option;
-2. `"language"` in `~/.config/xorway/config.json` (e.g. `"fr"`);
+2. the language chosen in **Settings → Language**, stored as `"language"` in
+   `~/.config/xorway/config.json` (e.g. `"fr"`; “Automatic” removes it);
 3. the `LANGUAGE`, `LC_ALL`, `LC_MESSAGES` then `LANG` environment variables
    (set by Plasma from the system language);
 4. English.
@@ -88,6 +92,8 @@ translation platforms such as Weblate.
 
 1. Copy `internal/i18n/locales/en.json` to `<lang>.json` (e.g. `de.json`).
 2. Translate the values; keep the keys and the `{{.Placeholders}}` unchanged.
+   `language.name` is the language's own name (`"Deutsch"`), shown in the
+   language submenu.
 3. Messages with plural forms are objects (`"one"`, `"other"`, and `"few"`,
    `"many"`… depending on the language, following the
    [CLDR plural rules](https://www.unicode.org/cldr/charts/latest/supplemental/language_plural_rules.html)).

@@ -26,29 +26,37 @@ const (
 	actionNone = iota
 	actionQuit
 	actionToggleNotify
+	actionSetLanguage
 )
 
-// entry is a menu line; the zero value is a separator.
+// entry is a menu line; the zero value is a separator. An entry with depth
+// d > 0 belongs to the submenu of the closest preceding entry of depth d-1.
 type entry struct {
 	title    string
 	tooltip  string
 	disabled bool
 	icon     string // app id whose icon is shown ("" for none)
 	action   int
+	arg      string // action argument (language code)
 	checkbox bool
 	checked  bool
+	depth    int
 }
 
 var separator = entry{}
 
 // sameShape reports whether an entry can be updated in place.
 func sameShape(a, b entry) bool {
-	return (a == separator) == (b == separator) && a.action == b.action && a.checkbox == b.checkbox
+	return (a == separator) == (b == separator) && a.depth == b.depth &&
+		a.action == b.action && a.arg == b.arg && a.checkbox == b.checkbox
 }
 
 // Options configures the tray.
 type Options struct {
-	BackendName string
+	// BackendName returns the (translated) name of the backend.
+	BackendName func() string
+	// Version is shown at the bottom of the menu.
+	Version string
 	// Icons returns the PNG icon of an application (nil if not found).
 	Icons func(appID string) []byte
 	// GenericIcon replaces an icon that cannot be found.
@@ -57,6 +65,11 @@ type Options struct {
 	NotifyGames func() bool
 	// OnToggleNotify is called when the user toggles the checkbox.
 	OnToggleNotify func()
+	// Language returns the selected language ("" for automatic); nil hides
+	// the language submenu.
+	Language func() string
+	// OnSetLanguage is called with the language chosen by the user.
+	OnSetLanguage func(lang string)
 }
 
 // Tray drives the icon and the menu. Init then Update must be called from a
@@ -190,18 +203,53 @@ func (t *Tray) setTooltip(s string) {
 // footer appends the fixed entries at the bottom of the menu.
 func (t *Tray) footer(menu []entry) []entry {
 	menu = append(menu, separator)
+	menu = append(menu, t.settings()...)
+	return append(menu,
+		separator,
+		entry{title: i18n.T("menu.backend", "Name", t.opts.BackendName()), disabled: true},
+		entry{title: i18n.T("menu.version", "Version", t.opts.Version), disabled: true},
+		entry{title: i18n.T("menu.quit"), action: actionQuit},
+	)
+}
+
+// settings returns the "Settings" submenu.
+func (t *Tray) settings() []entry {
+	var sub []entry
 	if t.opts.NotifyGames != nil {
-		menu = append(menu, entry{
+		sub = append(sub, entry{
 			title:    i18n.T("menu.notify_games"),
 			action:   actionToggleNotify,
 			checkbox: true,
 			checked:  t.opts.NotifyGames(),
+			depth:    1,
 		})
 	}
-	return append(menu,
-		entry{title: i18n.T("menu.backend", "Name", t.opts.BackendName), disabled: true},
-		entry{title: i18n.T("menu.quit"), action: actionQuit},
-	)
+	if t.opts.Language != nil {
+		selected := t.opts.Language()
+		sub = append(sub,
+			entry{title: i18n.T("menu.language"), depth: 1},
+			entry{
+				title:    i18n.T("menu.language_auto", "Name", i18n.Name(i18n.Detect())),
+				action:   actionSetLanguage,
+				checkbox: true,
+				checked:  selected == "",
+				depth:    2,
+			})
+		for _, l := range i18n.Available() {
+			sub = append(sub, entry{
+				title:    i18n.Name(l),
+				action:   actionSetLanguage,
+				arg:      l,
+				checkbox: true,
+				checked:  selected == l,
+				depth:    2,
+			})
+		}
+	}
+	if len(sub) == 0 {
+		return nil
+	}
+	return append([]entry{{title: i18n.T("menu.settings")}}, sub...)
 }
 
 // setMenu updates the menu: in place when its structure is unchanged (the
@@ -224,17 +272,18 @@ func (t *Tray) setMenu(menu []entry) {
 	t.lastMenu = menu
 	t.items = make([]*systray.MenuItem, len(menu))
 	systray.ResetMenu()
+	var parents []*systray.MenuItem // parents[d]: last item of depth d
 	for i, e := range menu {
 		if e == separator {
 			systray.AddSeparator()
 			continue
 		}
-		var item *systray.MenuItem
-		if e.checkbox {
-			item = systray.AddMenuItemCheckbox(escape(e.title), e.tooltip, e.checked)
-		} else {
-			item = systray.AddMenuItem(escape(e.title), e.tooltip)
+		parents = parents[:min(e.depth, len(parents))]
+		var parent *systray.MenuItem
+		if e.depth > 0 {
+			parent = parents[e.depth-1]
 		}
+		item := addItem(parent, e)
 		if e.disabled {
 			item.Disable()
 		}
@@ -242,7 +291,23 @@ func (t *Tray) setMenu(menu []entry) {
 			item.SetIcon(t.appIcon(e.icon))
 		}
 		t.items[i] = item
-		t.listen(item, e.action)
+		parents = append(parents, item)
+		t.listen(item, e.action, e.arg)
+	}
+}
+
+// addItem creates the item of e, at the top level when parent is nil.
+func addItem(parent *systray.MenuItem, e entry) *systray.MenuItem {
+	title := escape(e.title)
+	switch {
+	case parent == nil && e.checkbox:
+		return systray.AddMenuItemCheckbox(title, e.tooltip, e.checked)
+	case parent == nil:
+		return systray.AddMenuItem(title, e.tooltip)
+	case e.checkbox:
+		return parent.AddSubMenuItemCheckbox(title, e.tooltip, e.checked)
+	default:
+		return parent.AddSubMenuItem(title, e.tooltip)
 	}
 }
 
@@ -284,13 +349,17 @@ func (t *Tray) appIcon(appID string) []byte {
 
 // listen runs the action on every click. ResetMenu closes the channel, which
 // ends the goroutine.
-func (t *Tray) listen(item *systray.MenuItem, action int) {
+func (t *Tray) listen(item *systray.MenuItem, action int, arg string) {
 	var f func()
 	switch action {
 	case actionQuit:
 		f = systray.Quit
 	case actionToggleNotify:
 		f = t.opts.OnToggleNotify
+	case actionSetLanguage:
+		if t.opts.OnSetLanguage != nil {
+			f = func() { t.opts.OnSetLanguage(arg) }
+		}
 	}
 	if f == nil {
 		return

@@ -116,6 +116,15 @@ func Available() []string {
 	return langs
 }
 
+// Name returns the name of a language in that language ("Français"), taken
+// from its "language.name" message.
+func Name(lang string) string {
+	if m, ok := catalogs[lang]["language.name"]; ok {
+		return m["other"]
+	}
+	return lang
+}
+
 // Language returns the current language.
 func Language() string {
 	mu.RLock()

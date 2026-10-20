@@ -5,6 +5,7 @@
 package main
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"flag"
@@ -12,7 +13,9 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"runtime/debug"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -34,8 +37,39 @@ import (
 
 const debounce = 200 * time.Millisecond
 
-// version is set at build time: -ldflags "-X main.version=v1.2.3".
+// version is set at build time: -ldflags "-X main.version=v1.2.3". Without
+// it, buildVersion falls back to the module version or the VCS revision.
 var version = "dev"
+
+func buildVersion() string {
+	if version != "dev" {
+		return version
+	}
+	info, ok := debug.ReadBuildInfo()
+	if !ok {
+		return version
+	}
+	// Built from a checkout: the revision is more telling than the
+	// pseudo-version Go derives from it ("v0.1.1-0.2026…+dirty").
+	var rev, dirty string
+	for _, s := range info.Settings {
+		switch s.Key {
+		case "vcs.revision":
+			rev = s.Value
+		case "vcs.modified":
+			if s.Value == "true" {
+				dirty = "-dirty"
+			}
+		}
+	}
+	if rev != "" {
+		return version + "-" + rev[:min(7, len(rev))] + dirty
+	}
+	if v := info.Main.Version; v != "" && v != "(devel)" {
+		return v // go install xorway@v1.2.3
+	}
+	return version
+}
 
 func main() {
 	// The language must be known before printing anything, help included.
@@ -60,6 +94,7 @@ func main() {
 	if *lang != "" {
 		i18n.SetLanguage(*lang)
 	}
+	version = buildVersion()
 
 	level := slog.LevelInfo
 	if *debug {
@@ -85,7 +120,7 @@ func main() {
 		systray.Quit()
 	}()
 
-	systray.Run(func() { onReady(ctx, b, cfg, *interval) }, func() {
+	systray.Run(func() { onReady(ctx, b, cfg, *lang, *interval) }, func() {
 		cancel()
 		if err := b.Close(); err != nil {
 			slog.Warn("closing the backend", "err", err)
@@ -109,7 +144,7 @@ func subcommand(name string, args []string) bool {
 			fmt.Println(i18n.T("install.uninstalled"))
 		}
 	case "version", "--version", "-version":
-		fmt.Println("xorway", version)
+		fmt.Println("xorway", buildVersion())
 	default:
 		return false
 	}
@@ -151,9 +186,13 @@ type app struct {
 	alerter  *alert.Alerter
 	refresh  chan struct{} // request for an immediate refresh
 	interval time.Duration
+
+	mu   sync.Mutex // guards cfg and lang (changed from the menu)
+	cfg  config.Config
+	lang string // selected language: cfg.Language unless overridden by --lang
 }
 
-func onReady(ctx context.Context, b backend.Backend, cfg config.Config, interval time.Duration) {
+func onReady(ctx context.Context, b backend.Backend, cfg config.Config, lang string, interval time.Duration) {
 	idx := desktop.NewIndex()
 	icons := appicon.New(idx)
 	notifier, err := notify.New()
@@ -167,20 +206,18 @@ func onReady(ctx context.Context, b backend.Backend, cfg config.Config, interval
 		alerter:  alert.New(notifier, icons, idx, cfg.NotifyGames),
 		refresh:  make(chan struct{}, 1),
 		interval: interval,
+		cfg:      cfg,
+		lang:     cmp.Or(lang, cfg.Language),
 	}
 	a.tray = tray.New(tray.Options{
-		BackendName: b.Name(),
-		Icons:       func(appID string) []byte { return icons.PNG(appID, tray.IconSize) },
-		GenericIcon: icons.Generic(tray.IconSize),
-		NotifyGames: a.alerter.Enabled,
-		OnToggleNotify: func() {
-			cfg.NotifyGames = !a.alerter.Enabled()
-			a.alerter.SetEnabled(cfg.NotifyGames)
-			if err := config.Save(cfg); err != nil {
-				slog.Warn("saving the configuration", "err", err)
-			}
-			a.requestRefresh()
-		},
+		BackendName:    b.Name,
+		Version:        version,
+		Icons:          func(appID string) []byte { return icons.PNG(appID, tray.IconSize) },
+		GenericIcon:    icons.Generic(tray.IconSize),
+		NotifyGames:    a.alerter.Enabled,
+		OnToggleNotify: a.toggleNotify,
+		Language:       a.language,
+		OnSetLanguage:  a.setLanguage,
 	})
 	a.tray.Init()
 
@@ -194,6 +231,41 @@ func onReady(ctx context.Context, b backend.Backend, cfg config.Config, interval
 	}
 
 	go a.loop(ctx)
+}
+
+func (a *app) toggleNotify() {
+	a.mu.Lock()
+	a.cfg.NotifyGames = !a.alerter.Enabled()
+	a.alerter.SetEnabled(a.cfg.NotifyGames)
+	a.saveConfig()
+	a.mu.Unlock()
+	a.requestRefresh()
+}
+
+func (a *app) language() string {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.lang
+}
+
+// setLanguage switches the interface language ("" for automatic); the menu
+// is rebuilt with the new texts by the next refresh.
+func (a *app) setLanguage(lang string) {
+	a.mu.Lock()
+	a.lang = lang
+	a.cfg.Language = lang
+	used := i18n.SetLanguage(lang)
+	a.saveConfig()
+	a.mu.Unlock()
+	slog.Info("language changed", "selected", lang, "language", used)
+	a.requestRefresh()
+}
+
+// saveConfig writes a.cfg; a.mu must be held.
+func (a *app) saveConfig() {
+	if err := config.Save(a.cfg); err != nil {
+		slog.Warn("saving the configuration", "err", err)
+	}
 }
 
 func (a *app) requestRefresh() {

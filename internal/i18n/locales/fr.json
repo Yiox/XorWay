@@ -1,4 +1,6 @@
 {
+  "language.name": "Français",
+
   "status.loading": "Chargement…",
 
   "backend.x11": "X11 (repli)",
@@ -10,7 +12,11 @@
   "menu.none": "(aucune)",
   "menu.untitled": "(sans titre)",
   "menu.notify_games": "Notifier les jeux lancés sous XWayland",
+  "menu.settings": "Paramètres",
+  "menu.language": "Langue",
+  "menu.language_auto": "Automatique ({{.Name}})",
   "menu.backend": "Backend : {{.Name}}",
+  "menu.version": "Version : {{.Version}}",
   "menu.quit": "Quitter",
 
   "tooltip.counts": "{{.XWayland}} XWayland, {{.Native}} Wayland natif",

@@ -1,4 +1,6 @@
 {
+  "language.name": "English",
+
   "status.loading": "Loading…",
 
   "backend.x11": "X11 (fallback)",
@@ -10,7 +12,11 @@
   "menu.none": "(none)",
   "menu.untitled": "(untitled)",
   "menu.notify_games": "Notify when a game runs under XWayland",
+  "menu.settings": "Settings",
+  "menu.language": "Language",
+  "menu.language_auto": "Automatic ({{.Name}})",
   "menu.backend": "Backend: {{.Name}}",
+  "menu.version": "Version: {{.Version}}",
   "menu.quit": "Quit",
 
   "tooltip.counts": "{{.XWayland}} XWayland, {{.Native}} native Wayland",

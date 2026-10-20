@@ -14,7 +14,7 @@ opening the code; only open the files you need.
 | `internal/backend/kwin/` | loads `script/xorway.js` (embedded) through `org.kde.KWin /Scripting`; the script calls `org.xorway.Daemon.Update(json)`; X11 cross-check fallback |
 | `internal/backend/x11only/` | fallback backend: XWayland windows only |
 | `internal/x11/` | xgb: `_NET_CLIENT_LIST`, titles, `WM_CLASS`, PID, `SKIP_TASKBAR`; `Monitor` with reconnection |
-| `internal/tray/` | dbusmenu menu (fyne.io/systray), state icons drawn in Go (`icon.go`) |
+| `internal/tray/` | dbusmenu menu (fyne.io/systray): window lists, Settings submenu (notifications, language), backend + version lines; state icons drawn in Go (`icon.go`) |
 | `internal/i18n/` | translations: `T`/`N`/`NewError`/`Wrap`, catalogs `locales/<lang>.json` (go-i18n v2 format), language detection |
 | `internal/desktop/` | .desktop file index (Icon, Categories, StartupWMClass, localized Name) |
 | `internal/appicon/` | Icon Theme spec (`theme.go`) + PNG/SVG rendering (`appicon.go`) |
@@ -41,7 +41,16 @@ opening the code; only open the files you need.
 - Under GNOME, do not connect to Xwayland (on-demand startup).
 - `xorway.desktop` (`@BINDIR@` template) is the single source: used by
   `install`, the Makefile and the GoReleaser `before` hook (`build/`).
-- `main.version` is injected at build time (Makefile: `git describe`).
+- `main.version` is injected at build time (Makefile: `git describe`); without
+  it, `buildVersion()` uses the VCS revision (`dev-0ff7d2a-dirty`) or the
+  module version (`go install`).
+- Menu entries are a flat list; `entry.depth` > 0 nests an entry under the
+  closest preceding entry of depth-1 (submenus). Settings changes arrive on
+  `listen` goroutines: `app.mu` guards `cfg`/`lang`, then `requestRefresh()`
+  redraws the menu (language switch included, no restart).
+- The menu only uses SNI + dbusmenu features (submenus, checkmarks, disabled
+  items): it must keep working on any tray host (Plasma, XFCE, GNOME with the
+  AppIndicator extension, waybar…). No GUI toolkit window (no CGO).
 
 ## Translations (i18n)
 
@@ -54,8 +63,10 @@ opening the code; only open the files you need.
   `go test ./internal/i18n` fails on a missing key, a key used in code but
   absent from `en.json`, or placeholders that differ between languages.
 - Sentinel errors are `i18n.NewError(id)`; `errors.Is` matches on the ID.
-- The language is set once at startup (`--lang` > config `language` >
-  `LANGUAGE`/`LC_ALL`/`LC_MESSAGES`/`LANG` > English).
+- The language is set at startup (`--lang` > config `language` >
+  `LANGUAGE`/`LC_ALL`/`LC_MESSAGES`/`LANG` > English) and can change at
+  runtime from the menu: never cache a translated string, translate when
+  displaying. Each catalog has `language.name` (its own name, `i18n.Name`).
 - Logs (`slog`) are **not** translated and stay in English.
 
 ## Conventions
